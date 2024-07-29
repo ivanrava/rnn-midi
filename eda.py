@@ -1,3 +1,6 @@
+import os
+import pickle
+
 import music21
 from music21.chord import Chord
 from music21.instrument import Piano, Instrument
@@ -124,10 +127,10 @@ def read_midi(filename):
         'key': key_to_string(score[music21.key.KeySignature][0]),
         'parts': len(score.parts),
         'music21_instruments': score_instruments(score),
-        'pm_instruments': midi.instruments,
+        'pm_instruments': [{'program': i.program, 'is_drum': i.is_drum, 'name': i.name} for i in midi.instruments],
         'analyzed_keys': analyze_keys(score),
-        'key_signature_changes': midi.key_signature_changes,
-        'time_signature_changes': midi.time_signature_changes
+        'key_signature_changes': [{'key_number': k.key_number, 'time': k.time} for k in midi.key_signature_changes],
+        'time_signature_changes': [{'numerator': t.numerator, 'denominator': t.denominator, 'time': t.time} for t in midi.time_signature_changes]
     }
     # print(f'How many events should we sample: {sample_events(score)}')
 
@@ -141,7 +144,24 @@ def note_distribution(note_map):
     plt.show()
 
 
+def piano_roll(filename):
+    midi = pm.PrettyMIDI(filename)
+    sns.heatmap(midi.get_piano_roll())
+    plt.show()
+
+def analyze_midi_files(directory):
+    arr = []
+    for root, _, files in os.walk(directory):
+        for file in files:
+            if file.endswith('.midi') or file.endswith('.mid'):
+                descriptor = read_midi(os.path.join(root, file))
+                arr.append(descriptor)
+    return arr
+
+def analyze_folder_and_save(directory, name):
+    arr = analyze_midi_files(directory)
+    pickle.dump(arr, open(name + '.pickle', 'wb'))
+
 if __name__ == '__main__':
-    obj = read_midi("datasets/examples/Hollow Knight.mid")
-    pprint(obj)
-    note_distribution(obj['music21_instruments'][0]['notes_count'] + obj['music21_instruments'][1]['notes_count'])
+    analyze_folder_and_save("datasets/examples", "examples")
+    # note_distribution(obj['music21_instruments'][0]['notes_count'] + obj['music21_instruments'][1]['notes_count'])
