@@ -135,15 +135,6 @@ def read_midi(filename):
     # print(f'How many events should we sample: {sample_events(score)}')
 
 
-def note_distribution(note_map):
-    sns.heatmap(
-        note_map,
-        xticklabels=['C','C#\nDb','D','D#\nEb','E','F','F#\nGb','G','G#\nAb','A','A\nBb','B'],
-        annot=True
-    )
-    plt.show()
-
-
 def piano_roll(filename):
     midi = pm.PrettyMIDI(filename)
     sns.heatmap(midi.get_piano_roll())
@@ -164,4 +155,3 @@ def analyze_folder_and_save(directory, name):
 
 if __name__ == '__main__':
     analyze_folder_and_save("datasets/examples", "examples")
-    # note_distribution(obj['music21_instruments'][0]['notes_count'] + obj['music21_instruments'][1]['notes_count'])
