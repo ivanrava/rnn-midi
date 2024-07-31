@@ -16,6 +16,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
 import pretty_midi as pm
+import tqdm
 
 
 def sample_events(stream, sampling_frequency=12):
@@ -151,16 +152,17 @@ def piano_roll(filename):
 
 def analyze_midi_files(directory):
     arr = []
-    for root, _, files in os.walk(directory):
-        for file in files:
+    for root, _, files in tqdm.tqdm(os.walk(directory)):
+        for file in tqdm.tqdm(files, leave=False):
             if file.endswith('.midi') or file.endswith('.mid'):
-                print(f"Reading {os.path.join(root, file)}...", end="")
+                #print(f"Reading {os.path.join(root, file)}...", end="")
                 try:
                     descriptor = read_midi(os.path.join(root, file))
                     arr.append(descriptor)
-                    print("Done")
+                    #print("Done")
                 except Exception as e:
-                    print(e)
+                    pass
+                    #print(e)
     return arr
 
 def analyze_folder_and_save(directory, name):
