@@ -57,6 +57,7 @@ def score_instruments(score: Score|Piano):
     return [
         {
             'notes_count': count_part_notes(part),
+            'velocities': get_velocities(part),
             **extract_instrument_metadata(part.flatten().elements[0]),
         } for part in score.parts
     ]
@@ -112,6 +113,14 @@ def analyze_keys(score: Score):
         {'key': key_to_string(alternate), 'correlation': alternate.correlationCoefficient} for alternate in results.alternateInterpretations
     ]
 
+
+def get_velocities(part: Part):
+    velocities = np.zeros(128, dtype=int)
+    for note in part.flatten().notes:
+        if type(note) == Note or type(note) == Chord:
+            velocities[note.volume.velocity] += 1
+
+    return velocities
 
 def read_midi(filename):
     midi = pm.PrettyMIDI(filename)
