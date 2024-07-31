@@ -154,8 +154,13 @@ def analyze_midi_files(directory):
     for root, _, files in os.walk(directory):
         for file in files:
             if file.endswith('.midi') or file.endswith('.mid'):
-                descriptor = read_midi(os.path.join(root, file))
-                arr.append(descriptor)
+                print(f"Reading {os.path.join(root, file)}...", end="")
+                try:
+                    descriptor = read_midi(os.path.join(root, file))
+                    arr.append(descriptor)
+                    print("Done")
+                except Exception as e:
+                    print(e)
     return arr
 
 def analyze_folder_and_save(directory, name):
