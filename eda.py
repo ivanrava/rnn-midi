@@ -1,5 +1,4 @@
 import pickle
-from pprint import pprint
 from typing import List, Dict
 
 import numpy as np
@@ -8,7 +7,7 @@ import seaborn as sns
 from matplotlib import pyplot as plt
 
 
-def read_pickle(filename):
+def read_pickle_raw(filename):
     with open(filename, 'rb') as f:
         return pickle.load(f)
 
@@ -17,7 +16,7 @@ def filter_dict_keys(el, keys_to_keep):
     return {k:el[k] for k in el if k in keys_to_keep}
 
 
-def filter_dicts_array_to_df(data, keys_to_keep):
+def filter_raw_array_to_df(data, keys_to_keep):
     return pd.DataFrame([filter_dict_keys(el, keys_to_keep) for el in data])
 
 
@@ -46,7 +45,7 @@ def keep_most_probable_tempo(data: List):
     return [filter_el(piece) for piece in data]
 
 
-def check_which_pieces_change_key_time_signature(data: List):
+def check_which_pieces_change_key_or_time_signature(data: List):
     def filter_el(piece: Dict):
         return {**piece,
                 'changes_key': str(len(piece['key_signature_changes']) > 1),
@@ -55,46 +54,32 @@ def check_which_pieces_change_key_time_signature(data: List):
     return [filter_el(piece) for piece in data]
 
 
-def histogram_lengths(data: pd.DataFrame, dataset: str, xlim = None):
+def plot_lengths(df: pd.DataFrame):
     plt.grid(True)
-    sns.histplot(data, x='length')
-    plt.title(f'{dataset} - Total length: {np.round(data["length"].sum() / 60, 2)} hours')
+    sns.histplot(data=df, x='length', hue='dataset')
+    plt.title(f'Total length: {np.round(df["length"].sum() / 60, 2)} hours')
     plt.xlabel('Length [minutes]')
-    if xlim is not None:
-        plt.xlim(xlim)
+    plt.show()
+
+    sns.barplot(data=df, x='dataset', y='length', hue='dataset', estimator=sum, errorbar=None)
+    plt.title('Dataset lengths')
+    plt.grid(True)
+    plt.ylabel('Length [minutes]')
+    plt.xlabel('')
     plt.show()
 
 
-def histogram_tempos(data: pd.DataFrame, dataset: str, ylim = None):
+def plot_tempos(df: pd.DataFrame):
+    sns.histplot(data=df, x='tempo', y='length', hue='dataset')
     plt.grid(True)
-    sns.histplot(data, x='tempo', y='length')
-    plt.title(f'{dataset} - Total length: {np.round(data["length"].sum() / 60, 2)} hours')
+    plt.title(f'Total length: {np.round(df["length"].sum() / 60, 2)} hours')
     plt.xlabel('Tempo [BPM]')
     plt.ylabel('Length [minutes]')
-    if ylim is not None:
-        plt.ylim(ylim)
     plt.show()
 
 
-def violin(data: pd.DataFrame, dataset: str, group_by: str):
-    plt.figure(figsize=(8, 8))
-    plt.title(f'{dataset} - lengths by {group_by}')
-    sns.violinplot(data[data['length'] <= 10], hue=group_by, x='length', y=group_by)
-    plt.show()
-
-
-def columns(data: pd.DataFrame, dataset: str, group_by: str):
-    working_copy = data.copy(deep=True)
-    working_copy['length'] /= 60
-
-    plt.title(f'{dataset} - lengths according to {group_by}')
-    plt.grid(True)
-    sns.barplot(working_copy, y=group_by, x='length', hue='are_all_keyboards', estimator=sum, errorbar=None)
-    plt.xlabel('Length [hours]')
-    plt.show()
-
-
-def note_distribution(note_map, dataset: str):
+def plot_notes(df: pd.DataFrame, dataset_name: str):
+    note_map = sum([instr['notes_count'] for instrs in df['music21_instruments'] for instr in instrs])
     import matplotlib.ticker as tkr
 
     formatter = tkr.ScalarFormatter(useMathText=True)
@@ -107,7 +92,7 @@ def note_distribution(note_map, dataset: str):
         cbar_kws={"format": formatter}
     )
     ax.invert_yaxis()
-    plt.title(f"{dataset} note distribution - C4 is Middle C")
+    plt.title(f"{dataset_name} - Note distribution (C4 is Middle C)")
     plt.show()
 
 
@@ -128,65 +113,131 @@ def note_distribution_3d(note_map):
     plt.show()
 
 
-if __name__ == '__main__':
-    filename = 'vgmusic.pickle'
-    dataset_human_name = 'VGMusic'
+def plot_velocities(df: pd.DataFrame, dataset_name: str):
+    velocity_data = sum([instr['velocities'] for instrs in df['music21_instruments'] for instr in instrs])
+    velocity_data = [sum(velocity_data[i:i + 2]) for i in range(0, len(velocity_data), 2)]
+    df = pd.DataFrame({
+        'x': [i*2 for i in range(len(velocity_data))],  # gli indici rappresentano le ascisse
+        'y': velocity_data  # i valori rappresentano le ordinate
+    })
+    sns.barplot(x='x', y='y', data=df)
+    plt.xticks(ticks=range(0, len(velocity_data), 10))
+    plt.title(f'{dataset_name} - Velocities')
+    plt.grid(True)
+    plt.show()
 
+
+def preprocess_raw_array(data):
+    collected_data = keep_most_probable_key(data)
+    collected_data = keep_most_probable_tempo(collected_data)
+    collected_data = check_which_pieces_change_key_or_time_signature(collected_data)
+    return collected_data
+
+def filter_raw_array(data, max_instruments: int = 8, max_minutes: int = 15):
+    collected_data = [el for el in data if
+                      len(el['music21_instruments']) <= max_instruments
+                      and el['length'] < max_minutes * 60]
+    return collected_data
+
+
+def read_pickle_into_df(
+        filename: str = 'pijama.pickle',
+        dataset_human_name: str = 'PiJAMA',
+        genre: str = None
+):
+    collected_data = read_pickle_raw(filename)
+
+    collected_data = preprocess_raw_array(collected_data)
+    collected_data = filter_raw_array(collected_data)
+
+    df = filter_raw_array_to_df(collected_data, [
+        'duration', 'length', 'filename', 'key',
+        'changes_key', 'changes_time_signature',
+        'music21_instruments', 'tempo'
+    ])
+    df['dataset'] = dataset_human_name
+    if genre is not None:
+        df['genre'] = genre
+    return df
+
+
+def merge_datasets_and_clean(dfs):
+    df_merged = pd.concat(dfs, axis=0)
+    df_merged = df_merged.drop(columns=['subgenre', 'author', 'title'])
+    df_merged = df_merged.dropna()
+    df_merged['length'] /= 60
+    return df_merged
+
+
+def add_columns(df):
     keyboard_instruments = [
-        'Piano','ElectricPiano','Harpsichord','Clavichord',
-        'Celesta','Organ','Accordion',
-        'Vibraphone','Sampler','Glockenspiel','Harp','Instrument'
+        'Piano','ElectricPiano','Harpsichord','Clavichord','Celesta','Sampler',
+        'Organ','PipeOrgan','ElectricOrgan','ReedOrgan','Accordion',
+        'Vibraphone','Marimba','Glockenspiel','Xylophone','Harp',
     ]
     keyboard_pairs = []
     for k1 in keyboard_instruments:
         for k2 in keyboard_instruments:
             keyboard_pairs.append(f'{k1},{k2}')
 
-    collected_data = read_pickle(filename)
-    collected_data = keep_most_probable_key(collected_data)
-    collected_data = keep_most_probable_tempo(collected_data)
-    collected_data = check_which_pieces_change_key_time_signature(collected_data)
+    df['instruments_number'] = df['music21_instruments'].str.len()
+    df['instruments_classes'] = df['music21_instruments'].apply(lambda x: [i['music21_instrument_class'] for i in x])
+    df['is_two_keyboards'] = df['instruments_classes'].apply(lambda instrs: len(instrs) <= 2 and ','.join(instrs) in keyboard_pairs + keyboard_instruments)
+    df['are_all_keyboards'] = df['instruments_classes'].apply(lambda instrs: all([i in keyboard_instruments for i in instrs]))
+    return df
 
-    if 'vgm' in filename:
-        collected_data = [el for el in collected_data if len(el['music21_instruments']) < 8 and el['length'] < 25*60]
 
-    pprint(collected_data[0])
+def plot_genres(df):
+    plt.figure(figsize=(8, 8))
+    plt.title('Genres distribution')
+    sns.violinplot(data=df, hue='genre', x='length', y='genre')
+    plt.show()
 
-    res = filter_dicts_array_to_df(collected_data, [
-        'duration', 'length', 'filename', 'key', 'changes_key', 'changes_time_signature',
-        'music21_instruments', 'tempo'
-    ])
+    working_copy = df.copy(deep=True)
+    working_copy['length'] /= 60
 
-    res['instruments_number'] = res['music21_instruments'].str.len()
-    res['instruments_classes'] = res['music21_instruments'].apply(lambda x: [i['music21_instrument_class'] for i in x])
+    plt.title(f'Genres distribution')
+    plt.grid(True)
+    sns.barplot(working_copy, y='genre', x='length', hue='dataset', estimator=sum, errorbar=None)
+    plt.xlabel('Length [hours]')
+    plt.show()
 
-    print(res['instruments_classes'].str.join(',').value_counts()[:40])
-    res['is_two_keyboards'] = res['instruments_classes'].apply(lambda instrs: str(len(instrs) <= 2 and ','.join(instrs) in keyboard_pairs + keyboard_instruments))
-    res['are_all_keyboards'] = res['instruments_classes'].apply(lambda instrs: str(all([i in keyboard_instruments for i in instrs])))
 
-    if 'vgm' in filename:
-        res = res[res['are_all_keyboards'] == 'True']
+def plot_keys_time_signatures(df):
+    working_copy = df.copy(deep=True)
+    working_copy['length'] /= 60
 
-    if 'adl' in filename:
-        res = adl_parse_genres(res)
-    res['length'] /= 60
+    plt.title(f'Key distribution')
+    plt.grid(True)
+    sns.barplot(df, y='key', x='length', hue='dataset', estimator=sum, errorbar=None)
+    plt.xlabel('Length [hours]')
+    plt.show()
 
-    histogram_lengths(res, dataset_human_name, [0, 10])
-    if 'adl' in filename:
-        violin(res, dataset_human_name, 'genre')
-        columns(res, dataset_human_name, 'genre')
 
-    pprint(res['tempo'])
-    columns(res, dataset_human_name, 'key')
-    columns(res, dataset_human_name, 'changes_key')
-    columns(res, dataset_human_name, 'changes_time_signature')
-    columns(res, dataset_human_name, 'is_two_keyboards')
-    columns(res, dataset_human_name, 'are_all_keyboards')
+def plots(df: pd.DataFrame):
+    plot_lengths(df)
+    plot_genres(df)
+    plot_keys_time_signatures(df)
+    plot_tempos(df)
+    for dataset in df['dataset'].unique():
+        plot_notes(df[df['dataset'] == dataset], dataset)
+        plot_velocities(df[df['dataset'] == dataset], dataset)
 
-    histogram_tempos(res, dataset_human_name)
 
-    keyboard_notes = sum([instr['notes_count'] for instrs in res[res['are_all_keyboards'] == 'True']['music21_instruments'] for instr in instrs])
+if __name__ == '__main__':
+    df_maestro = read_pickle_into_df('maestro.pickle', 'MAESTRO', 'Classical')
+    df_pijama = read_pickle_into_df('pijama.pickle', 'PiJAMA', 'Jazz')
+    df_vgmusic = read_pickle_into_df('vgmusic.pickle', 'VGMusic', 'Soundtracks')
+    df_adl = read_pickle_into_df('adl.pickle', 'ADL Piano')
+    df_adl = adl_parse_genres(df_adl)
 
-    note_distribution_3d(keyboard_notes)
-    note_distribution(keyboard_notes, dataset_human_name)
+    df_merged = merge_datasets_and_clean([df_maestro, df_adl, df_vgmusic, df_pijama])
+    df_merged = add_columns(df_merged)
 
+    df_piano = df_merged[df_merged['are_all_keyboards']]
+    df_not_piano = df_merged[~df_merged['are_all_keyboards']]
+    print(len(df_piano))
+    print(len(df_not_piano))
+    assert len(df_piano) + len(df_not_piano) == len(df_merged)
+
+    plots(df_piano)
