@@ -145,8 +145,6 @@ def score_to_representations(s: Score, filename: str, augment=True, debug=False)
     for i,r in enumerate(chordwise_reprs):
         write_to_file(f'{filename}-{i}.chordwise', ' '.join(r))
         notewise_repr = chordwise_to_notewise(r)
-        if i == 6:
-            print(notewise_repr[:40])
         write_to_file(f'{filename}-{i}.notewise', notewise_repr)
 
 
