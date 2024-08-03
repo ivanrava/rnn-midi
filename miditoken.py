@@ -161,12 +161,12 @@ def read_directories(sample_freq=12):
                 score_to_representations(score, "texts/" + genre + "/" + file.strip('.midi').strip('.mid'), sample_freq=sample_freq)
 
 
-def vocabulary(extension: str):
+def vocabulary(extension: str, folder: str = 'texts'):
     import os
 
     voc = {}
 
-    for root, _, files in tqdm.tqdm(os.walk("texts")):
+    for root, _, files in tqdm.tqdm(os.walk(folder)):
         for file in tqdm.tqdm(files, leave=False):
             if file.endswith(extension):
                 with open(os.path.join(root, file), 'r') as f:
@@ -177,7 +177,14 @@ def vocabulary(extension: str):
                         else:
                             voc[word] += 1
 
-    print(len(voc))
+    print(f"Vocabulary length: {len(voc)}")
+    print(f"Most frequent word: {max(voc, key=voc.get)}")
+    print(f"\tOccurs {max(voc.values())} times")
+    print(f"Most rare word: {min(voc, key=voc.get)}")
+    print(f"\tOccurs {min(voc.values())} times")
+    npvals = np.array(voc.values())
+    print(f"Average frequencies: {np.mean(npvals)}")
+    print(f"Standard deviation: {np.std(npvals)}")
 
 
 if __name__ == '__main__':
