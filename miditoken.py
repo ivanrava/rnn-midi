@@ -161,5 +161,25 @@ def read_directories():
                 score_to_representations(score, "texts/" + genre + "/" + file.strip('.midi').strip('.mid'))
 
 
+def vocabulary(extension: str):
+    import os
+
+    voc = {}
+
+    for root, _, files in tqdm.tqdm(os.walk("texts")):
+        for file in tqdm.tqdm(files, leave=False):
+            if file.endswith(extension):
+                with open(os.path.join(root, file), 'r') as f:
+                    contents = f.read()
+                    for word in contents.split(" "):
+                        if word not in voc:
+                            voc[word] = 0
+                        else:
+                            voc[word] += 1
+
+    print(len(voc))
+
+
 if __name__ == '__main__':
-    read_directories()
+    # read_directories()
+    vocabulary(".notewise")
