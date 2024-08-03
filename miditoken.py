@@ -26,7 +26,7 @@ def score_to_chordwise(s: Score, note_range=12 * 8, sample_freq=12, num_instrume
     # Extract all note events from the score
     note_events = []
     for n in s.flatten().notes:
-        note_events += NoteEvent.from_pitches(n.pitches, n.offset, n.duration.quarterLength, n.volume)
+        note_events += NoteEvent.from_pitches(n.pitches, n.offset, n.duration.quarterLength, n.volume, sampling_freq=sample_freq)
 
     for n in note_events:
         pr_matrix[n.timestep, n.instrument, n.pitch] = 1  # Strike note
@@ -131,8 +131,8 @@ def write_to_file(filename, contents):
         f.write(contents)
 
 
-def score_to_representations(s: Score, filename: str, augment=True, debug=False):
-    chordwise_repr = score_to_chordwise(s)
+def score_to_representations(s: Score, filename: str, augment=True, debug=False, sample_freq=12):
+    chordwise_repr = score_to_chordwise(s, sample_freq=sample_freq)
     chordwise_reprs = [chordwise_repr]
 
     if debug:
@@ -144,11 +144,11 @@ def score_to_representations(s: Score, filename: str, augment=True, debug=False)
 
     for i,r in enumerate(chordwise_reprs):
         write_to_file(f'{filename}-{i}.chordwise', ' '.join(r))
-        notewise_repr = chordwise_to_notewise(r)
+        notewise_repr = chordwise_to_notewise(r, sample_freq=sample_freq)
         write_to_file(f'{filename}-{i}.notewise', notewise_repr)
 
 
-def read_directories():
+def read_directories(sample_freq=12):
     import os
 
     directory = "datasets"
@@ -158,7 +158,7 @@ def read_directories():
             genre = root.split('/')[-1]
             for file in tqdm.tqdm(files, leave=False):
                 score = music21.converter.parse(os.path.join(root, file))
-                score_to_representations(score, "texts/" + genre + "/" + file.strip('.midi').strip('.mid'))
+                score_to_representations(score, "texts/" + genre + "/" + file.strip('.midi').strip('.mid'), sample_freq=sample_freq)
 
 
 def vocabulary(extension: str):
@@ -181,5 +181,6 @@ def vocabulary(extension: str):
 
 
 if __name__ == '__main__':
-    # read_directories()
+    read_directories()
     vocabulary(".notewise")
+    vocabulary(".chordwise")
