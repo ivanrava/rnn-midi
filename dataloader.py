@@ -26,7 +26,9 @@ class NotewiseDataset(Dataset):
         word_list = []
         for genre_docs_list in midi_files.values():
             for doc in genre_docs_list:
-                for word in doc:
+                for word in doc.split(' '):
+                    if word == '':
+                        continue
                     word_list.append(self.convert_word(word))
 
         word_list = torch.tensor(word_list, dtype=torch.int64, device=torch.device('cpu'))
@@ -45,7 +47,9 @@ class NotewiseDataset(Dataset):
             return int(word.lstrip('p'))
         elif word.startswith('endp'):
             return int(word.lstrip('endp'))
-        else:
+        elif word == 'wait':
+            return 1
+        elif word.startswith('wait'):
             return int(word.lstrip('wait'))
 
 
