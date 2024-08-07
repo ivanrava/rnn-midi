@@ -52,4 +52,4 @@ if __name__ == '__main__':
 
     log("Reading MIDI documents...")
     docs = read_documents("texts-4", '.notewise')
-    log(f"Documents read: {sys.getsizeof(docs) } B")
+    log(f"Documents read: {len(docs)} totalling {sum([sys.getsizeof(d) for d in docs]) / 10**6 } MB")
