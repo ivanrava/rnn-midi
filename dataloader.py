@@ -19,7 +19,7 @@ def set_seed(seed = 1337):
     os.environ['PYTHONHASHSEED'] = str(seed)
 
 class NotewiseDataset(Dataset):
-    def __init__(self, midi_files: dict, window_len, notes_to_guess=1):
+    def __init__(self, midi_files: dict, window_len: int, notes_to_guess: int = 1):
         self._window_len = window_len
         self._notes_to_guess = notes_to_guess
         # TODO: add genre
@@ -39,7 +39,7 @@ class NotewiseDataset(Dataset):
 
     def __getitem__(self, idx):
         designed_window = self.tensors[idx]
-        return designed_window[:self._window_len], designed_window[self._window_len:]
+        return designed_window[:self._window_len-self._notes_to_guess], designed_window[self._window_len-self._notes_to_guess:]
 
     @staticmethod
     def convert_word(word: str):
@@ -85,4 +85,4 @@ if __name__ == '__main__':
 
     log("Building dataloader...")
     dataloader = build_dataloader(NotewiseDataset(docs, 10), batch_size=16)
-    log("Dataloader built")
+    log(f"Dataloader built: {len(dataloader)} batches")
