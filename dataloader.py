@@ -31,12 +31,14 @@ class NotewiseDataset(Dataset):
                     if word == '':
                         continue
                     word_list.append(word)
-        log(f"Finished reading words: {len(word_list)} (unique {len(set(word_list))})")
 
-        min_wait = min([w for w in word_list if w.startswith('wait')], key=lambda w: int(w.lstrip('wait')))
-        max_wait = max([w for w in word_list if w.startswith('wait')], key=lambda w: int(w.lstrip('wait')))
-        min_note = min([w for w in word_list if w.startswith('p')], key=lambda w: int(w.lstrip('p')))
-        max_note = max([w for w in word_list if w.startswith('p')], key=lambda w: int(w.lstrip('p')))
+        unique_words = set(word_list)
+        log(f"Finished reading words: {len(word_list)} (unique {len(unique_words)})")
+
+        min_wait = min([int(w.lstrip('wait')) for w in unique_words if w.startswith('wait')])
+        max_wait = max([int(w.lstrip('wait')) for w in unique_words if w.startswith('wait')])
+        min_note = min([int(w.lstrip('p')) for w in unique_words if w.startswith('p')])
+        max_note = max([int(w.lstrip('p')) for w in unique_words if w.startswith('p')])
         log(f"Min wait: {min_wait}")
         log(f"Max wait: {max_wait}")
         log(f"Min note: {min_note}")
