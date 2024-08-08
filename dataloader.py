@@ -44,7 +44,7 @@ class NotewiseDataset(Dataset):
         log(f"Min note: {min_note}")
         log(f"Max note: {max_note}")
 
-        # FIXME: convert to numbers
+        word_list = [self.convert_word(word) for word in word_list]
         word_list = torch.tensor(word_list, dtype=torch.int64, device=torch.device('cpu'))
         self.tensors = word_list.unfold(0, self._window_len, 1)
 
@@ -56,15 +56,21 @@ class NotewiseDataset(Dataset):
         return designed_window[:self._window_len-self._notes_to_guess], designed_window[self._window_len-self._notes_to_guess:]
 
     @staticmethod
-    def convert_word(word: str):
+    def convert_word(word: str, max_wait: int, max_note: int, min_wait, min_note: int):
+        wait_slice = np.zeros(max_wait - min_wait + 1)
+        note_slice = np.zeros(max_note - min_note + 1)
         if word.startswith('p'):
-            return int(word.lstrip('p'))
+            note_index = int(word.lstrip('p'))
+            note_slice[note_index - min_note] = 1
         elif word.startswith('endp'):
-            return int(word.lstrip('endp'))
+            note_index = int(word.lstrip('endp'))
+            note_slice[note_index - min_note] = -1
         elif word == 'wait':
-            return 1
+            raise Exception("Unexpected word")
         elif word.startswith('wait'):
-            return int(word.lstrip('wait'))
+            wait_index = int(word.lstrip('wait'))
+            wait_slice[wait_index - min_wait] = 1
+        return np.concatenate((wait_slice, note_slice), axis=0)
 
 
 def build_dataloader(dataset: NotewiseDataset, batch_size=16) -> DataLoader:
