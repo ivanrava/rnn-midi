@@ -59,7 +59,7 @@ class NotewiseDataset(Dataset):
 
     def __getitem__(self, idx):
         designed_window = self.word_list[idx:idx + self._window_len]
-        designed_window = [self.convert_word(word) for word in designed_window]
+        designed_window = np.array([self.convert_word(word) for word in designed_window])
 
         example = designed_window[:-self._notes_to_guess]
         label = designed_window[self._window_len-self._notes_to_guess:]
