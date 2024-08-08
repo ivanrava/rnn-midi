@@ -23,14 +23,26 @@ class NotewiseDataset(Dataset):
         self._window_len = window_len
         self._notes_to_guess = notes_to_guess
         # TODO: add genre
+        log("Reading words...")
         word_list = []
         for genre_docs_list in midi_files.values():
             for doc in genre_docs_list:
                 for word in doc.split(' '):
                     if word == '':
                         continue
-                    word_list.append(self.convert_word(word))
+                    word_list.append(word)
+        log(f"Finished reading words: {len(word_list)} (unique {len(set(word_list))})")
 
+        min_wait = min([w for w in word_list if w.startswith('wait')], key=lambda w: int(w.lstrip('wait')))
+        max_wait = max([w for w in word_list if w.startswith('wait')], key=lambda w: int(w.lstrip('wait')))
+        min_note = min([w for w in word_list if w.startswith('p')], key=lambda w: int(w.lstrip('p')))
+        max_note = max([w for w in word_list if w.startswith('p')], key=lambda w: int(w.lstrip('p')))
+        log(f"Min wait: {min_wait}")
+        log(f"Max wait: {max_wait}")
+        log(f"Min note: {min_note}")
+        log(f"Max note: {max_note}")
+
+        # FIXME: convert to numbers
         word_list = torch.tensor(word_list, dtype=torch.int64, device=torch.device('cpu'))
         self.tensors = word_list.unfold(0, self._window_len, 1)
 
