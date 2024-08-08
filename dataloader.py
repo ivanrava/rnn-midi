@@ -44,7 +44,7 @@ class NotewiseDataset(Dataset):
         log(f"Min note: {min_note}")
         log(f"Max note: {max_note}")
 
-        word_list = [self.convert_word(word) for word in word_list]
+        word_list = [self.convert_word(word, max_wait, max_note, min_wait, min_note) for word in word_list]
         word_list = torch.tensor(word_list, dtype=torch.int64, device=torch.device('cpu'))
         self.tensors = word_list.unfold(0, self._window_len, 1)
 
