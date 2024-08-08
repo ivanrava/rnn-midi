@@ -99,7 +99,7 @@ if __name__ == '__main__':
     set_seed()
 
     log("Reading MIDI documents...")
-    docs = read_documents("texts-4", '.notewise')
+    docs = read_documents("texts-12", '.notewise')
     log(f"Documents read: {sum([len(docs[g]) for g in docs])} totalling {sum([sum([sys.getsizeof(d) for d in docs[g]]) for g in docs]) / 10**6 } MB")
     log(f'Genres: {len(docs)}')
 
