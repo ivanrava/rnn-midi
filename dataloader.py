@@ -1,4 +1,3 @@
-import datetime
 import os
 import random
 import sys
@@ -7,6 +6,8 @@ import numpy as np
 import torch
 from torch.utils.data import Dataset, DataLoader
 import tqdm
+
+from utils import log
 
 
 def set_seed(seed = 1337):
@@ -22,18 +23,19 @@ class NotewiseDataset(Dataset):
     def __init__(self, midi_files: dict, window_len: int, notes_to_guess: int = 1):
         self._window_len = window_len
         self._notes_to_guess = notes_to_guess
+
         # TODO: add genre
         log("Reading words...")
         self.word_list = []
         for genre_docs_list in midi_files.values():
-            for doc in genre_docs_list:
-                for word in doc.split(' '):
-                    if word == '':
-                        continue
-                    self.word_list.append(word)
-
+           for doc in genre_docs_list:
+               for word in doc.split(' '):
+                   if word == '':
+                       continue
+                   self.word_list.append(word)
         unique_words = set(self.word_list)
-        log(f"Finished reading words: {len(self.word_list)} (unique {len(unique_words)})")
+        self.vocab_size = len(unique_words)
+        log(f"Finished reading words: {len(self.word_list)} (unique {self.vocab_size})")
 
         self.min_wait = min([int(w.lstrip('wait')) for w in unique_words if w.startswith('wait')])
         self.max_wait = max([int(w.lstrip('wait')) for w in unique_words if w.startswith('wait')])
@@ -87,12 +89,14 @@ class NotewiseDataset(Dataset):
 
 
 def build_dataloader(dataset: NotewiseDataset, batch_size=16) -> DataLoader:
-    return DataLoader(dataset, batch_size=batch_size)
+    log("Building dataloader...")
+    loader = DataLoader(dataset, batch_size=batch_size)
+    log(f"Dataloader built: {len(loader)} batches")
+    return loader
 
-def log(message):
-    print(f"[{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}]: {message}")
+def read_documents(texts_folder: str, extension: str) -> dict:
+    log("Reading MIDI documents...")
 
-def read_documents(texts_folder: str, extension: str):
     documents = {}
     for root, _, files in tqdm.tqdm(os.walk(texts_folder)):
         genre = root.split('/')[-1]
@@ -106,16 +110,50 @@ def read_documents(texts_folder: str, extension: str):
                             documents[genre] = [f.read()]
                 except Exception as e:
                     print(e)
+
+    log(f"Documents read: {sum([len(documents[g]) for g in documents])} totalling {sum([sum([sys.getsizeof(d) for d in documents[g]]) for g in documents]) / 10**6 } MB")
+    log(f'Genres: {len(documents)}')
+
     return documents
+
+def split_list(lst: list, p1: float, p2: float, _p3: float):
+    random.shuffle(lst)
+    len1 = int(len(lst) * p1)
+    len2 = int(len(lst) * p2)
+
+    sublist1 = lst[:len1]
+    sublist2 = lst[len1:len1+len2]
+    sublist3 = lst[len1+len2:]
+
+    return sublist1, sublist2, sublist3
+
+
+def split_documents_dict(documents: dict, p1: float, p2: float, _p3: float):
+    d1 = {}
+    d2 = {}
+    d3 = {}
+    for genre in documents:
+        d1[genre], d2[genre], d3[genre] = split_list(documents[genre], p1, p2, _p3)
+    return d1, d2, d3
+
+def build_split_loaders(
+        folder: str, extension: str,
+        train_perc=0.8, val_perc=0.1, test_perc=0.1,
+        window_len: int = 10, to_guess: int = 1, batch_size: int = 16
+    ):
+    docs = read_documents(folder, extension)
+    train_docs, val_docs, test_docs = split_documents_dict(docs, train_perc, val_perc, test_perc)
+
+    train_dataset = NotewiseDataset(train_docs, window_len, to_guess)
+
+    train_loader = build_dataloader(train_dataset, batch_size=batch_size)
+    val_loader = build_dataloader(NotewiseDataset(val_docs, window_len, to_guess), batch_size=batch_size)
+    test_loader = build_dataloader(NotewiseDataset(test_docs, window_len, to_guess), batch_size=batch_size)
+
+    return train_loader, val_loader, test_loader, train_dataset.vocab_size
 
 if __name__ == '__main__':
     set_seed()
 
-    log("Reading MIDI documents...")
     docs = read_documents("texts-12", '.notewise')
-    log(f"Documents read: {sum([len(docs[g]) for g in docs])} totalling {sum([sum([sys.getsizeof(d) for d in docs[g]]) for g in docs]) / 10**6 } MB")
-    log(f'Genres: {len(docs)}')
-
-    log("Building dataloader...")
     dataloader = build_dataloader(NotewiseDataset(docs, 10), batch_size=16)
-    log(f"Dataloader built: {len(dataloader)} batches")
