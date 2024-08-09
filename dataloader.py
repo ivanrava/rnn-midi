@@ -26,17 +26,23 @@ class NotewiseDataset(Dataset):
 
         # TODO: add genre
         log("Reading words...")
-        self.word_list = []
+        self.vocab = {}
+        self.vocab_size = 0
+        self.docs = []
         for genre_docs_list in midi_files.values():
-           for doc in genre_docs_list:
-               for word in doc.split(' '):
-                   if word == '':
-                       continue
-                   self.word_list.append(word)
-        unique_words = set(self.word_list)
-        self.vocab_size = len(unique_words)
-        log(f"Finished reading words: {len(self.word_list)} (unique {self.vocab_size})")
+            for doc in genre_docs_list:
+                word_list = []
+                for word in doc.split(' '):
+                    if word == '':
+                        continue
+                    if word not in self.vocab:
+                        self.vocab_size += 1
+                        self.vocab[word] = self.vocab_size
+                    word_list.append(self.vocab[word])
+                self.docs.append(word_list)
+        log(f"Finished reading words: {sum([len(doc) for doc in self.docs])} (unique {self.vocab_size})")
 
+        """
         self.min_wait = min([int(w.lstrip('wait')) for w in unique_words if w.startswith('wait')])
         self.max_wait = max([int(w.lstrip('wait')) for w in unique_words if w.startswith('wait')])
         self.min_note = min([int(w.lstrip('p')) for w in unique_words if w.startswith('p')])
@@ -45,6 +51,7 @@ class NotewiseDataset(Dataset):
         log(f"Max wait: {self.max_wait}")
         log(f"Min note: {self.min_note}")
         log(f"Max note: {self.max_note}")
+        """
 
         """
         log("Converting words into numbers...")
@@ -57,11 +64,24 @@ class NotewiseDataset(Dataset):
         """
 
     def __len__(self):
-        return len(self.word_list) - self._window_len + 1
+        return sum([self.num_windows(doc) for doc in self.docs])
+
+    def num_windows(self, doc):
+        return len(doc) - self._window_len + 1
+
+    def batch_idx_to_local_window(self, batch_idx: int):
+        windows = 0
+        for doc in self.docs:
+            local_windows = self.num_windows(doc)
+            if batch_idx <= windows + local_windows:
+                local_idx = batch_idx - windows
+                return doc[local_idx:local_idx + self._window_len]
+            else:
+                windows += local_windows
+
 
     def __getitem__(self, idx):
-        designed_window = self.word_list[idx:idx + self._window_len]
-        designed_window = np.array([self.convert_word(word) for word in designed_window])
+        designed_window = self.batch_idx_to_local_window(idx)
 
         example = designed_window[:-self._notes_to_guess]
         label = designed_window[self._window_len-self._notes_to_guess:]
@@ -71,6 +91,7 @@ class NotewiseDataset(Dataset):
 
         return example, label
 
+    """
     def convert_word(self, word: str):
         wait_slice = np.zeros(self.max_wait - self.min_wait + 1)
         note_slice = np.zeros(self.max_note - self.min_note + 1)
@@ -86,7 +107,7 @@ class NotewiseDataset(Dataset):
             wait_index = int(word.lstrip('wait'))
             wait_slice[wait_index - self.min_wait] = 1
         return np.concatenate((wait_slice, note_slice), axis=0)
-
+    """
 
 def build_dataloader(dataset: NotewiseDataset, batch_size=16) -> DataLoader:
     log("Building dataloader...")
