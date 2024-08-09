@@ -61,7 +61,7 @@ if __name__ == '__main__':
         dropout_rate=dropout_rate
     )
 
-    model = EncDecWords(encoder, decoder, device).to(device)
+    model = EncDecWords(encoder, decoder, device, device_str).to(device)
     optimizer = Adam(model.parameters(), lr=lr)
 
     log(f"Starting training for {epochs} epochs...")

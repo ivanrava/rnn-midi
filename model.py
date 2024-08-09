@@ -64,13 +64,14 @@ class DecoderWords(nn.Module):
         return decoder_outputs, decoder_hidden, None
 
 class EncDecWords(nn.Module):
-    def __init__(self, encoder: EncoderWords, decoder: DecoderWords, device, *args, **kwargs):
+    def __init__(self, encoder: EncoderWords, decoder: DecoderWords, device, device_str: str, *args, **kwargs):
         super(EncDecWords, self).__init__(*args, **kwargs)
 
         self.encoder = encoder
         self.decoder = decoder
 
         self.device = device
+        self.device_str = device_str
 
     def forward(self, input_tensor, label_tensor):
         encoder_outputs, encoder_hidden = self.encoder(input_tensor)
@@ -94,7 +95,7 @@ class EncDecWords(nn.Module):
                 optimizer.zero_grad()
                 input_tensor, label_tensor = [x.to(self.device) for x in batch]
 
-                with autocast(self.device):
+                with autocast(self.device_str):
                     output_tensor = self(input_tensor, label_tensor)
                     loss = criterion(output_tensor.view(-1, output_tensor.size(-1)), label_tensor.view(-1))
 
@@ -130,7 +131,7 @@ class EncDecWords(nn.Module):
             for batch in val_batches:
                 input_tensor, label_tensor = [x.to(self.device) for x in batch]
 
-                with autocast():
+                with autocast(self.device_str):
                     output_tensor = self(input_tensor, label_tensor)
                     loss = criterion(output_tensor.view(-1, output_tensor.size(-1)), label_tensor.view(-1))
 
@@ -152,7 +153,7 @@ class EncDecWords(nn.Module):
             for batch in test_batches:
                 input_tensor, target_tensor = [b.to(self.device) for b in batch]
 
-                with autocast():
+                with autocast(self.device_str):
                     output_tensor = self(input_tensor, target_tensor)
                     predictions = output_tensor.argmax(dim=-1)
 
