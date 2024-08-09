@@ -1,6 +1,5 @@
 import torch
-from torch import nn
-from torch.cuda.amp import GradScaler
+from torch import nn, GradScaler
 from torch.optim import Adam
 
 from dataloader import set_seed, build_split_loaders
@@ -10,7 +9,8 @@ from utils import log
 if __name__ == '__main__':
     set_seed()
 
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    device_str = 'cuda' if torch.cuda.is_available() else 'cpu'
+    device = torch.device(device_str)
     log(f"Performing training on {device}")
 
     embedding_size = 128
@@ -26,7 +26,7 @@ if __name__ == '__main__':
     log(f'Epochs: {epochs}')
 
     criterion = nn.NLLLoss()
-    scaler = GradScaler()
+    scaler = GradScaler(device_str)
 
     whole_sequence_length = 10
     to_guess = 1

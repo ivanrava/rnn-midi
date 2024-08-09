@@ -4,7 +4,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch.cuda.amp import autocast
+from torch import autocast
 from tqdm import tqdm
 from sklearn.metrics import accuracy_score
 
@@ -44,7 +44,7 @@ class DecoderWords(nn.Module):
     def forward(self, encoder_outputs, encoder_hidden, label_tensor=None):
         batch_size = encoder_outputs.size[0]
 
-        decoder_input = torch.tensor([[0]]*encoder_outputs.size[0], dtype=torch.long, device=self.device)
+        decoder_input = torch.tensor([[0]]*batch_size, dtype=torch.long, device=self.device)
         decoder_hidden = encoder_hidden
 
         decoder_outputs = []
@@ -94,7 +94,7 @@ class EncDecWords(nn.Module):
                 optimizer.zero_grad()
                 input_tensor, label_tensor = [x.to(self.device) for x in batch]
 
-                with autocast():
+                with autocast(self.device):
                     output_tensor = self(input_tensor, label_tensor)
                     loss = criterion(output_tensor.view(-1, output_tensor.size(-1)), label_tensor.view(-1))
 
