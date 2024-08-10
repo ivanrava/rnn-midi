@@ -99,7 +99,7 @@ class EncDecWords(nn.Module):
 
                 with autocast(self.device_str):
                     output_tensor = self(input_tensor, label_tensor)
-                    loss = criterion(output_tensor.view(-1, output_tensor.size(-1)), label_tensor.view(-1))
+                    loss = criterion(output_tensor.view(-1), label_tensor.view(-1))
 
                 ep_loss += loss.item()
 
