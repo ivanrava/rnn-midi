@@ -42,7 +42,7 @@ class DecoderWords(nn.Module):
         return output, hidden
 
     def forward(self, encoder_outputs, encoder_hidden, label_tensor=None):
-        batch_size = encoder_outputs.size[0]
+        batch_size = encoder_outputs.size(0)
 
         decoder_input = torch.tensor([[0]]*batch_size, dtype=torch.long, device=self.device)
         decoder_hidden = encoder_hidden
@@ -75,7 +75,7 @@ class EncDecWords(nn.Module):
 
     def forward(self, input_tensor, label_tensor):
         encoder_outputs, encoder_hidden = self.encoder(input_tensor)
-        decoder_outputs,  = self.decoder(encoder_outputs, encoder_hidden, label_tensor)
+        decoder_outputs, _, _  = self.decoder(encoder_outputs, encoder_hidden, label_tensor)
 
         return decoder_outputs
 
