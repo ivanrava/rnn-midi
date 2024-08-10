@@ -8,6 +8,8 @@ from torch import autocast
 from tqdm import tqdm
 from sklearn.metrics import accuracy_score
 
+from utils import log
+
 
 class EncoderWords(nn.Module):
     def __init__(self, input_vocab_size: int, embedding_size=128, hidden_size=256, dropout_rate=0.1, *args, **kwargs):
@@ -106,12 +108,16 @@ class EncDecWords(nn.Module):
                 scaler.update()
 
             train_losses.append(ep_loss / len(train_batches))
+            log(f"Train loss: {ep_loss/len(train_batches)}")
 
             val_loss, accuracy = self.eval_model(val_batches, criterion)
+            log(f"Val loss: {val_loss}")
+            log(f"Val accuracy: {accuracy}")
             accuracies.append(accuracy)
             val_losses.append(val_loss)
 
             if val_loss < best_val_loss:
+                log(f"New best epoch with {val_loss} val loss")
                 best_val_loss = val_loss
                 best_model = copy.deepcopy(self.state_dict())
                 best_ep = ep+1
