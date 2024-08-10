@@ -114,9 +114,14 @@ class NotewiseDataset(Dataset):
         return np.concatenate((wait_slice, note_slice), axis=0)
     """
 
+class MidiDataLoader(DataLoader):
+    def __iter__(self):
+        self.dataset.reset_memoized_window_indexes()
+        return super().__iter__()
+
 def build_dataloader(dataset: NotewiseDataset, batch_size=16) -> DataLoader:
     log("Building dataloader...")
-    loader = DataLoader(dataset, batch_size=batch_size)
+    loader = MidiDataLoader(dataset, batch_size=batch_size)
     log(f"Dataloader built: {len(loader)} batches")
     return loader
 
