@@ -47,7 +47,7 @@ if __name__ == '__main__':
     )
 
     encoder = EncoderWords(
-        input_vocab_size=whole_sequence_length - to_guess,
+        input_vocab_size=vocab_size,
         embedding_size=embedding_size,
         hidden_size=hidden_size,
         dropout_rate=dropout_rate
