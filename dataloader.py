@@ -24,6 +24,8 @@ class NotewiseDataset(Dataset):
         self._window_len = window_len
         self._notes_to_guess = notes_to_guess
 
+        self.reset_memoized_window_indexes()
+
         # TODO: add genre
         log("Encoding documents with vocabulary...")
         self.docs = []
@@ -63,15 +65,25 @@ class NotewiseDataset(Dataset):
     def num_windows(self, doc):
         return len(doc) - self._window_len
 
+    def reset_memoized_window_indexes(self):
+        self.current_windows = 0
+        self.current_doc_idx = 0
+
     def item_idx_to_local_window(self, item_idx: int):
-        windows = 0
-        for doc in self.docs:
+        windows = self.current_windows
+        starting_doc_idx = self.current_doc_idx
+        for doc in self.docs[starting_doc_idx:]:
             local_windows = self.num_windows(doc)
             if item_idx <= windows + local_windows:
                 local_idx = item_idx - windows
                 return doc[local_idx:local_idx + self._window_len]
             else:
                 windows += local_windows
+                self.current_windows = windows
+                self.current_doc_idx += 1
+
+        self.reset_memoized_window_indexes()
+        return self.item_idx_to_local_window(item_idx)
 
     def __getitem__(self, idx):
         designed_window = self.item_idx_to_local_window(idx)
