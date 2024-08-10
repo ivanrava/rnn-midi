@@ -61,7 +61,7 @@ class NotewiseDataset(Dataset):
         return sum([self.num_windows(doc) for doc in self.docs])
 
     def num_windows(self, doc):
-        return len(doc) - self._window_len + 1
+        return len(doc) - self._window_len
 
     def batch_idx_to_local_window(self, batch_idx: int):
         windows = 0
@@ -72,7 +72,6 @@ class NotewiseDataset(Dataset):
                 return doc[local_idx:local_idx + self._window_len]
             else:
                 windows += local_windows
-
 
     def __getitem__(self, idx):
         designed_window = self.batch_idx_to_local_window(idx)
