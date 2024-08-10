@@ -4,6 +4,7 @@ import sys
 
 import numpy as np
 import torch
+import torch.nn.functional as F
 from torch.utils.data import Dataset, DataLoader
 import tqdm
 
@@ -20,9 +21,10 @@ def set_seed(seed = 1337):
     os.environ['PYTHONHASHSEED'] = str(seed)
 
 class NotewiseDataset(Dataset):
-    def __init__(self, midi_files: dict, vocab: dict, window_len: int = 10, notes_to_guess: int = 1):
+    def __init__(self, midi_files: dict, vocab: dict, vocab_size: int, window_len: int = 10, notes_to_guess: int = 1):
         self._window_len = window_len
         self._notes_to_guess = notes_to_guess
+        self.vocab_size = vocab_size
 
         self.reset_memoized_window_indexes()
 
@@ -93,6 +95,7 @@ class NotewiseDataset(Dataset):
 
         example = torch.tensor(example, dtype=torch.int64, device=torch.device('cpu'))
         label = torch.tensor(label, dtype=torch.int64, device=torch.device('cpu'))
+        label = F.one_hot(label, num_classes=self.vocab_size)
 
         return example, label
 
@@ -193,9 +196,9 @@ def build_split_loaders(
     vocab, vocab_size = build_vocab(docs)
     train_docs, val_docs, test_docs = split_documents_dict(docs, train_perc, val_perc, test_perc)
 
-    train_loader = build_dataloader(NotewiseDataset(train_docs, vocab, window_len, to_guess), batch_size=batch_size)
-    val_loader = build_dataloader(NotewiseDataset(val_docs, vocab, window_len, to_guess), batch_size=batch_size)
-    test_loader = build_dataloader(NotewiseDataset(test_docs, vocab, window_len, to_guess), batch_size=batch_size)
+    train_loader = build_dataloader(NotewiseDataset(train_docs, vocab, vocab_size, window_len, to_guess), batch_size=batch_size)
+    val_loader = build_dataloader(NotewiseDataset(val_docs, vocab, vocab_size, window_len, to_guess), batch_size=batch_size)
+    test_loader = build_dataloader(NotewiseDataset(test_docs, vocab, vocab_size, window_len, to_guess), batch_size=batch_size)
 
     return train_loader, val_loader, test_loader, vocab_size
 
