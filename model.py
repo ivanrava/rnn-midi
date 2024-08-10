@@ -61,7 +61,7 @@ class DecoderWords(nn.Module):
                 decoder_input = topi.squeeze(-1)
 
         decoder_outputs = torch.cat(decoder_outputs, dim=1)
-        decoder_outputs = F.log_softmax(decoder_outputs, dim=1)
+        decoder_outputs = F.log_softmax(decoder_outputs, dim=2)
 
         return decoder_outputs, decoder_hidden, None
 
