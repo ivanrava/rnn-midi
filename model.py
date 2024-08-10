@@ -91,7 +91,7 @@ class EncDecWords(nn.Module):
             self.train()
             ep_loss = 0.0
 
-            for batch in train_batches:
+            for batch in tqdm(train_batches, leave=False):
                 optimizer.zero_grad()
                 input_tensor, label_tensor = [x.to(self.device) for x in batch]
 
