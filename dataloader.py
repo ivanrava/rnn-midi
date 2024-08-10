@@ -20,27 +20,21 @@ def set_seed(seed = 1337):
     os.environ['PYTHONHASHSEED'] = str(seed)
 
 class NotewiseDataset(Dataset):
-    def __init__(self, midi_files: dict, window_len: int, notes_to_guess: int = 1):
+    def __init__(self, midi_files: dict, vocab: dict, window_len: int = 10, notes_to_guess: int = 1):
         self._window_len = window_len
         self._notes_to_guess = notes_to_guess
 
         # TODO: add genre
-        log("Reading words...")
-        self.vocab = {}
-        self.vocab_size = 0
+        log("Encoding documents with vocabulary...")
         self.docs = []
         for genre_docs_list in midi_files.values():
             for doc in genre_docs_list:
                 word_list = []
                 for word in doc.split(' '):
-                    if word == '':
-                        continue
-                    if word not in self.vocab:
-                        self.vocab_size += 1
-                        self.vocab[word] = self.vocab_size
-                    word_list.append(self.vocab[word])
+                    if word in vocab:
+                        word_list.append(vocab[word])
                 self.docs.append(word_list)
-        log(f"Finished reading words: {sum([len(doc) for doc in self.docs])} (unique {self.vocab_size})")
+        log(f"Documents encoded: {len(self.docs)} with {sum([len(doc) for doc in self.docs])} words")
 
         """
         self.min_wait = min([int(w.lstrip('wait')) for w in unique_words if w.startswith('wait')])
@@ -157,21 +151,37 @@ def split_documents_dict(documents: dict, p1: float, p2: float, _p3: float):
         d1[genre], d2[genre], d3[genre] = split_list(documents[genre], p1, p2, _p3)
     return d1, d2, d3
 
+
+def build_vocab(docs_dict: dict):
+    log("Building vocabulary...")
+    vocab = {}
+    vocab_size = 0
+    for genre_docs_list in docs_dict.values():
+        for doc in genre_docs_list:
+            for word in doc.split(' '):
+                if word == '':
+                    continue
+                if word not in vocab:
+                    vocab_size += 1
+                    vocab[word] = vocab_size
+    log(f"Vocabolary built: {vocab_size} words")
+    return vocab, vocab_size
+
+
 def build_split_loaders(
         folder: str, extension: str,
         train_perc=0.8, val_perc=0.1, test_perc=0.1,
         window_len: int = 10, to_guess: int = 1, batch_size: int = 16
     ):
     docs = read_documents(folder, extension)
+    vocab, vocab_size = build_vocab(docs)
     train_docs, val_docs, test_docs = split_documents_dict(docs, train_perc, val_perc, test_perc)
 
-    train_dataset = NotewiseDataset(train_docs, window_len, to_guess)
+    train_loader = build_dataloader(NotewiseDataset(train_docs, vocab, window_len, to_guess), batch_size=batch_size)
+    val_loader = build_dataloader(NotewiseDataset(val_docs, vocab, window_len, to_guess), batch_size=batch_size)
+    test_loader = build_dataloader(NotewiseDataset(test_docs, vocab, window_len, to_guess), batch_size=batch_size)
 
-    train_loader = build_dataloader(train_dataset, batch_size=batch_size)
-    val_loader = build_dataloader(NotewiseDataset(val_docs, window_len, to_guess), batch_size=batch_size)
-    test_loader = build_dataloader(NotewiseDataset(test_docs, window_len, to_guess), batch_size=batch_size)
-
-    return train_loader, val_loader, test_loader, train_dataset.vocab_size
+    return train_loader, val_loader, test_loader, vocab_size
 
 if __name__ == '__main__':
     set_seed()
