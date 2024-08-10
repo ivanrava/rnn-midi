@@ -63,18 +63,18 @@ class NotewiseDataset(Dataset):
     def num_windows(self, doc):
         return len(doc) - self._window_len
 
-    def batch_idx_to_local_window(self, batch_idx: int):
+    def item_idx_to_local_window(self, item_idx: int):
         windows = 0
         for doc in self.docs:
             local_windows = self.num_windows(doc)
-            if batch_idx <= windows + local_windows:
-                local_idx = batch_idx - windows
+            if item_idx <= windows + local_windows:
+                local_idx = item_idx - windows
                 return doc[local_idx:local_idx + self._window_len]
             else:
                 windows += local_windows
 
     def __getitem__(self, idx):
-        designed_window = self.batch_idx_to_local_window(idx)
+        designed_window = self.item_idx_to_local_window(idx)
 
         example = designed_window[:-self._notes_to_guess]
         label = designed_window[self._window_len-self._notes_to_guess:]
