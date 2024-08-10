@@ -173,8 +173,8 @@ def build_vocab(docs_dict: dict):
                 if word == '':
                     continue
                 if word not in vocab:
-                    vocab_size += 1
                     vocab[word] = vocab_size
+                    vocab_size += 1
     log(f"Vocabolary built: {vocab_size} words")
     return vocab, vocab_size
 
