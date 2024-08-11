@@ -11,25 +11,25 @@ from utils import log
 
 
 class EncoderWords(nn.Module):
-    def __init__(self, input_vocab_size: int, embedding_size=128, hidden_size=256, dropout_rate=0.1, *args, **kwargs):
+    def __init__(self, input_vocab_size: int, embedding_size=128, hidden_size=256, dropout_rate=0.1, nl=4, *args, **kwargs):
         super(EncoderWords, self).__init__(*args, **kwargs)
 
         self.embedding = nn.Embedding(input_vocab_size, embedding_size)
-        self.gru = nn.GRU(embedding_size, hidden_size, batch_first=True)
+        self.lstm = nn.LSTM(embedding_size, hidden_size, batch_first=True, num_layers=nl)
 
         self.dropout = nn.Dropout(dropout_rate)
 
     def forward(self, x):
         embedded = self.dropout(self.embedding(x))
-        output, hidden = self.gru(embedded)
+        output, hidden = self.lstm(embedded)
         return output, hidden
 
 class DecoderWords(nn.Module):
-    def __init__(self, num_guesses, device, output_size, embedding_size=128, hidden_size=256, dropout_rate=0.1, *args, **kwargs):
+    def __init__(self, num_guesses, device, output_size, embedding_size=128, hidden_size=256, dropout_rate=0.1, nl=4, *args, **kwargs):
         super(DecoderWords, self).__init__(*args, **kwargs)
 
         self.embedding = nn.Embedding(output_size, embedding_size)
-        self.gru = nn.GRU(embedding_size, hidden_size, batch_first=True)
+        self.lstm = nn.LSTM(embedding_size, hidden_size, batch_first=True, num_layers=nl)
         self.expansion = nn.Linear(hidden_size, output_size)
 
         self.num_guesses = num_guesses
@@ -37,7 +37,7 @@ class DecoderWords(nn.Module):
 
     def forward_step(self, decoder_input, decoder_hidden):
         output = self.embedding(decoder_input)
-        output, hidden = self.gru(output, decoder_hidden)
+        output, hidden = self.lstm(output, decoder_hidden)
         output = self.expansion(output)
 
         return output, hidden
