@@ -130,24 +130,26 @@ class EncDecWords(nn.Module):
         self.eval()
 
         val_loss = 0.0
-        val_preds = []
-        val_labels = []
+        num_correct = 0
+        num_total = 0
 
         with torch.no_grad():
-            for batch in val_batches:
+            for batch in tqdm(val_batches, leave=False):
                 input_tensor, label_tensor = [x.to(self.device) for x in batch]
 
                 with autocast(self.device_str):
                     output_tensor = self(input_tensor, label_tensor)
                     loss = criterion(output_tensor.view(-1), label_tensor.view(-1))
 
-                    predictions = output_tensor.argmax(dim=-1)
-
                 val_loss += loss.item()
-                val_preds.extend(predictions.cpu().numpy().flatten())
-                val_labels.extend(label_tensor.cpu().numpy().flatten())
+                # Calculate accuracy
+                predictions = output_tensor.argmax(dim=-1).cpu().numpy().flatten()
+                labels = label_tensor.argmax(dim=-1).cpu().numpy().flatten()
+                num_correct += np.sum(predictions == labels)
+                num_total += len(labels)
 
-        return val_loss/len(val_batches), accuracy_score(val_labels, val_preds)
+        log(f"Accuracy count: {num_correct} / {num_total}")
+        return val_loss/len(val_batches), num_correct / num_total
 
     def generate(self, test_batches):
         self.eval()
