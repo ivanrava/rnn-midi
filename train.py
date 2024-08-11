@@ -13,17 +13,19 @@ if __name__ == '__main__':
     device = torch.device(device_str)
     log(f"Performing training on {device}")
 
-    embedding_size = 128
-    hidden_size = 256
+    embedding_size = 256
+    hidden_size = 512
     dropout_rate = .1
     lr = 1e-3
     epochs = 10
+    lstm_layers = 4
 
     log(f'Embedding size: {embedding_size}')
     log(f'Hidden size: {hidden_size}')
     log(f'Dropout rate: {dropout_rate}')
     log(f'Learning rate: {lr}')
     log(f'Epochs: {epochs}')
+    log(f'LSTM layers: {lstm_layers}')
 
     criterion = nn.NLLLoss()
     scaler = GradScaler(device_str)
@@ -37,7 +39,7 @@ if __name__ == '__main__':
     test_perc = 0.1
     log(f'Dataset percentages: {train_perc}:{val_perc}:{test_perc}')
 
-    batch_size = 64
+    batch_size = 32
     log(f'Batch size: {batch_size}')
 
     train_loader, val_loader, test_loader, vocab_size = build_split_loaders(
@@ -50,7 +52,8 @@ if __name__ == '__main__':
         input_vocab_size=vocab_size,
         embedding_size=embedding_size,
         hidden_size=hidden_size,
-        dropout_rate=dropout_rate
+        dropout_rate=dropout_rate,
+        nl=lstm_layers
     )
     decoder = DecoderWords(
         to_guess,
@@ -58,7 +61,8 @@ if __name__ == '__main__':
         vocab_size,
         embedding_size=embedding_size,
         hidden_size=hidden_size,
-        dropout_rate=dropout_rate
+        dropout_rate=dropout_rate,
+        nl = lstm_layers
     )
 
     model = EncDecWords(encoder, decoder, device, device_str).to(device)
