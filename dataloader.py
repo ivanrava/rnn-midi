@@ -127,13 +127,15 @@ def build_dataloader(dataset: NotewiseDataset, batch_size=16) -> DataLoader:
     log(f"Dataloader built: {len(loader)} batches")
     return loader
 
-def read_documents(texts_folder: str, extension: str) -> dict:
+def read_documents(texts_folder: str, extension: str, keep_genres: list = None, max_docs_per_genre: int = 0) -> dict:
     log("Reading MIDI documents...")
 
     documents = {}
     for root, _, files in tqdm.tqdm(os.walk(texts_folder)):
         genre = root.split('/')[-1]
-        for file in tqdm.tqdm(files, leave=False):
+        if keep_genres is not None and genre not in keep_genres:
+            continue
+        for file in tqdm.tqdm(files if max_docs_per_genre == 0 else files[:max_docs_per_genre], leave=False):
             if file.endswith(extension):
                 try:
                     with open(os.path.join(root, file), 'r') as f:
