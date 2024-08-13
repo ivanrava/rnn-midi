@@ -127,13 +127,13 @@ def build_dataloader(dataset: NotewiseDataset, batch_size=16) -> DataLoader:
     log(f"Dataloader built: {len(loader)} batches")
     return loader
 
-def read_documents(texts_folder: str, extension: str, keep_genres: list = None, max_docs_per_genre: int = 0) -> dict:
+def read_documents(texts_folder: str, extension: str, limit_genres: list = None, max_docs_per_genre: int = 0) -> dict:
     log("Reading MIDI documents...")
 
     documents = {}
     for root, _, files in tqdm.tqdm(os.walk(texts_folder)):
         genre = root.split('/')[-1]
-        if keep_genres is not None and genre not in keep_genres:
+        if limit_genres is not None and genre not in limit_genres:
             continue
         for file in tqdm.tqdm(files if max_docs_per_genre == 0 else files[:max_docs_per_genre], leave=False):
             if file.endswith(extension):
@@ -191,9 +191,10 @@ def build_vocab(docs_dict: dict):
 def build_split_loaders(
         folder: str, extension: str,
         train_perc=0.8, val_perc=0.1, test_perc=0.1,
-        window_len: int = 10, to_guess: int = 1, batch_size: int = 16
+        window_len: int = 10, to_guess: int = 1, batch_size: int = 16,
+        max_docs_per_genre: int = 0, limit_genres: list = None,
     ):
-    docs = read_documents(folder, extension)
+    docs = read_documents(folder, extension, limit_genres=limit_genres, max_docs_per_genre=max_docs_per_genre)
     vocab, vocab_size = build_vocab(docs)
     train_docs, val_docs, test_docs = split_documents_dict(docs, train_perc, val_perc, test_perc)
 

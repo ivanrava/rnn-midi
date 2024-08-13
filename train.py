@@ -28,6 +28,8 @@ if __name__ == '__main__':
 
     dataset_sampling_frequency = 'texts-12'
     dataset_format = '.notewise'
+    limit_genres = None
+    max_docs_per_genre = 0
 
     criterion = nn.NLLLoss()
     scaler = GradScaler(device_str)
@@ -59,6 +61,8 @@ if __name__ == '__main__':
             "batch_size": batch_size,
             "dataset_sampling_frequency": dataset_sampling_frequency,
             "dataset_format": dataset_format,
+            "limit_genres": limit_genres,
+            "max_docs_per_genre": max_docs_per_genre,
         }
     )
 
@@ -78,7 +82,8 @@ if __name__ == '__main__':
     train_loader, val_loader, test_loader, vocab_size = build_split_loaders(
         dataset_sampling_frequency, dataset_format,
         train_perc=train_ratio, val_perc=val_ratio, test_perc=test_ratio,
-        window_len=whole_sequence_length, to_guess=to_guess, batch_size=batch_size
+        window_len=whole_sequence_length, to_guess=to_guess, batch_size=batch_size,
+        limit_genres=limit_genres, max_docs_per_genre=max_docs_per_genre
     )
 
     model = None
