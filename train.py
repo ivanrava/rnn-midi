@@ -5,6 +5,7 @@ import wandb
 
 from dataloader import set_seed, build_split_loaders
 from encoder_decoder import EncDecWords, EncoderWords, DecoderWords
+from rnn_plain import RNNPlain
 from utils import log
 
 if __name__ == '__main__':
@@ -13,6 +14,9 @@ if __name__ == '__main__':
     device_str = 'cuda' if torch.cuda.is_available() else 'cpu'
     device = torch.device(device_str)
     log(f"Performing training on {device}")
+
+    #model_str = "encoder-decoder"
+    model_str = "rnn-plain"
 
     embedding_size = 256
     hidden_size = 512
@@ -38,6 +42,7 @@ if __name__ == '__main__':
     wandb.init(
         project='rnn-midi',
         config={
+            "model": model_str,
             "torch_device": device_str,
             "embedding_size": embedding_size,
             "hidden_size": hidden_size,
@@ -76,25 +81,37 @@ if __name__ == '__main__':
         window_len=whole_sequence_length, to_guess=to_guess, batch_size=batch_size
     )
 
-    encoder = EncoderWords(
-        input_vocab_size=vocab_size,
-        embedding_size=embedding_size,
-        hidden_size=hidden_size,
-        dropout_rate=dropout_rate,
-        nl=lstm_layers
-    )
-    decoder = DecoderWords(
-        to_guess,
-        device,
-        vocab_size,
-        embedding_size=embedding_size,
-        hidden_size=hidden_size,
-        dropout_rate=dropout_rate,
-        nl = lstm_layers
-    )
+    model = None
+    optimizer = None
+    if model_str == 'encoder-decoder':
+        encoder = EncoderWords(
+            input_vocab_size=vocab_size,
+            embedding_size=embedding_size,
+            hidden_size=hidden_size,
+            dropout_rate=dropout_rate,
+            nl=lstm_layers
+        )
+        decoder = DecoderWords(
+            to_guess,
+            device,
+            vocab_size,
+            embedding_size=embedding_size,
+            hidden_size=hidden_size,
+            dropout_rate=dropout_rate,
+            nl = lstm_layers
+        )
 
-    model = EncDecWords(encoder, decoder, device, device_str).to(device)
-    optimizer = Adam(model.parameters(), lr=lr)
+        model = EncDecWords(encoder, decoder, device, device_str).to(device)
+        optimizer = Adam(model.parameters(), lr=lr)
+    elif model_str == 'rnn-plain':
+        model = RNNPlain(
+            input_vocab_size=vocab_size,
+            embedding_size=embedding_size,
+            hidden_size=hidden_size,
+            dropout_rate=dropout_rate,
+            nl=lstm_layers
+        ).to(device)
+        optimizer = Adam(model.parameters(), lr=lr)
 
     log(f"Starting training for {epochs} epochs...")
     wandb.watch(model, log_freq=10000)
