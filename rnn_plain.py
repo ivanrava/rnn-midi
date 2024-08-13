@@ -49,7 +49,7 @@ class RNNPlain(nn.Module):
                 input_tensor, label_tensor = [x.to(self.device) for x in batch]
 
                 with autocast(self.device_str):
-                    output_tensor = self(input_tensor, label_tensor)
+                    output_tensor = self(input_tensor)
                     loss = criterion(output_tensor.view(-1, output_tensor.size(-1)), label_tensor.view(-1))
 
                 ep_loss += loss.item()
@@ -101,7 +101,7 @@ class RNNPlain(nn.Module):
                 input_tensor, label_tensor = [x.to(self.device) for x in batch]
 
                 with autocast(self.device_str):
-                    output_tensor = self(input_tensor, label_tensor)
+                    output_tensor = self(input_tensor)
                     loss = criterion(output_tensor.view(-1, output_tensor.size(-1)), label_tensor.view(-1))
 
                 val_loss += loss.item()
@@ -130,7 +130,7 @@ class RNNPlain(nn.Module):
                 input_tensor, target_tensor = [b.to(self.device) for b in batch]
 
                 with autocast(self.device_str):
-                    output_tensor = self(input_tensor, target_tensor)
+                    output_tensor = self(input_tensor)
                     predictions = output_tensor.argmax(dim=-1)
 
                 test_preds.extend(predictions.cpu().numpy().flatten())
