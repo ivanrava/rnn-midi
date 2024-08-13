@@ -4,7 +4,7 @@ from torch.optim import Adam
 import wandb
 
 from dataloader import set_seed, build_split_loaders
-from model import EncDecWords, EncoderWords, DecoderWords
+from encoder_decoder import EncDecWords, EncoderWords, DecoderWords
 from utils import log
 
 if __name__ == '__main__':
