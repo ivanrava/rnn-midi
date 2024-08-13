@@ -1,6 +1,7 @@
 import torch
 from torch import nn, GradScaler
 from torch.optim import Adam
+import wandb
 
 from dataloader import set_seed, build_split_loaders
 from model import EncDecWords, EncoderWords, DecoderWords
@@ -19,6 +20,42 @@ if __name__ == '__main__':
     lr = 1e-3
     epochs = 10
     lstm_layers = 4
+    batch_size = 32
+
+    dataset_sampling_frequency = 'texts-12'
+    dataset_format = '.notewise'
+
+    criterion = nn.NLLLoss()
+    scaler = GradScaler(device_str)
+
+    whole_sequence_length = 10
+    to_guess = 1
+
+    train_ratio = 0.8
+    val_ratio = 0.1
+    test_ratio = 0.1
+
+    wandb.init(
+        project='rnn-midi',
+        config={
+            "torch_device": device_str,
+            "embedding_size": embedding_size,
+            "hidden_size": hidden_size,
+            "dropout_rate": dropout_rate,
+            "learning_rate": lr,
+            "epochs": epochs,
+            "lstm_layers": lstm_layers,
+            "criterion": "NLLLoss",
+            "whole_sequence_length": whole_sequence_length,
+            "to_guess": to_guess,
+            "train_perc": train_ratio,
+            "val_perc": val_ratio,
+            "test_perc": test_ratio,
+            "batch_size": batch_size,
+            "dataset_sampling_frequency": dataset_sampling_frequency,
+            "dataset_format": dataset_format,
+        }
+    )
 
     log(f'Embedding size: {embedding_size}')
     log(f'Hidden size: {hidden_size}')
@@ -27,24 +64,15 @@ if __name__ == '__main__':
     log(f'Epochs: {epochs}')
     log(f'LSTM layers: {lstm_layers}')
 
-    criterion = nn.NLLLoss()
-    scaler = GradScaler(device_str)
-
-    whole_sequence_length = 10
-    to_guess = 1
     log(f'Sequence length: {whole_sequence_length} (to guess: {to_guess})')
 
-    train_perc = 0.8
-    val_perc = 0.1
-    test_perc = 0.1
-    log(f'Dataset percentages: {train_perc}:{val_perc}:{test_perc}')
+    log(f'Dataset percentages: {train_ratio}:{val_ratio}:{test_ratio}')
 
-    batch_size = 32
     log(f'Batch size: {batch_size}')
 
     train_loader, val_loader, test_loader, vocab_size = build_split_loaders(
-        "texts-12", ".notewise",
-        train_perc=train_perc, val_perc=val_perc, test_perc=test_perc,
+        dataset_sampling_frequency, dataset_format,
+        train_perc=train_ratio, val_perc=val_ratio, test_perc=test_ratio,
         window_len=whole_sequence_length, to_guess=to_guess, batch_size=batch_size
     )
 
@@ -69,7 +97,10 @@ if __name__ == '__main__':
     optimizer = Adam(model.parameters(), lr=lr)
 
     log(f"Starting training for {epochs} epochs...")
+    wandb.watch(model, log_freq=10000)
     train_losses, accuracies, val_losses, best_epoch, best_val_loss = model.train_model(
         train_loader, val_loader, epochs, optimizer, criterion, scaler
     )
     log(f"Training finished! Best: epoch {best_epoch} with {best_val_loss}")
+
+    wandb.finish()

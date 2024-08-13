@@ -6,6 +6,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch import autocast
 from tqdm import tqdm
+import wandb
 
 from utils import log
 
@@ -91,6 +92,8 @@ class EncDecWords(nn.Module):
         for ep in tqdm(range(epochs)):
             self.train()
             ep_loss = 0.0
+            num_correct = 0
+            num_total = 0
 
             for batch in tqdm(train_batches, leave=False):
                 optimizer.zero_grad()
@@ -106,14 +109,26 @@ class EncDecWords(nn.Module):
                 scaler.step(optimizer)
                 scaler.update()
 
+                corr, tot = self.accuracy_values(output_tensor, label_tensor)
+                num_correct += corr
+                num_total += tot
+
             train_losses.append(ep_loss / len(train_batches))
-            log(f"Train loss: {ep_loss/len(train_batches)}")
+            log(f"Train loss: {train_losses[-1]}")
+            log(f"Train accuracy: {num_correct / num_total} ({num_correct}/{num_total})")
 
             val_loss, accuracy = self.eval_model(val_batches, criterion)
             log(f"Val loss: {val_loss}")
             log(f"Val accuracy: {accuracy}")
             accuracies.append(accuracy)
             val_losses.append(val_loss)
+
+            wandb.log({
+                "train_loss": train_losses[-1],
+                "train_accuracy": num_correct / num_total,
+                "val_loss": val_loss,
+                "val_accuracy": accuracy
+            })
 
             if val_loss < best_val_loss:
                 log(f"New best epoch with {val_loss} val loss")
@@ -141,14 +156,19 @@ class EncDecWords(nn.Module):
                     loss = criterion(output_tensor.view(-1, output_tensor.size(-1)), label_tensor.view(-1))
 
                 val_loss += loss.item()
-                # Calculate accuracy
-                predictions = output_tensor.argmax(dim=-1).cpu().numpy().flatten()
-                labels = label_tensor.cpu().numpy().flatten()
-                num_correct += np.sum(predictions == labels)
-                num_total += len(labels)
+                corr, tot = self.accuracy_values(output_tensor, label_tensor)
+                num_correct += corr
+                num_total += tot
 
         log(f"Accuracy count: {num_correct} / {num_total}")
         return val_loss/len(val_batches), num_correct / num_total
+
+    def accuracy_values(self, outputs, labels):
+        predictions = outputs.argmax(dim=-1).cpu().numpy().flatten()
+        labels = labels.cpu().numpy().flatten()
+        num_correct = np.sum(predictions == labels)
+        num_total = len(labels)
+        return num_correct, num_total
 
     def generate(self, test_batches):
         self.eval()
