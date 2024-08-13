@@ -98,7 +98,7 @@ class EncDecWords(nn.Module):
 
                 with autocast(self.device_str):
                     output_tensor = self(input_tensor, label_tensor)
-                    loss = criterion(output_tensor.view(-1), label_tensor.view(-1))
+                    loss = criterion(output_tensor.view(-1, output_tensor.size(-1)), label_tensor.view(-1))
 
                 ep_loss += loss.item()
 
@@ -138,12 +138,12 @@ class EncDecWords(nn.Module):
 
                 with autocast(self.device_str):
                     output_tensor = self(input_tensor, label_tensor)
-                    loss = criterion(output_tensor.view(-1), label_tensor.view(-1))
+                    loss = criterion(output_tensor.view(-1, output_tensor.size(-1)), label_tensor.view(-1))
 
                 val_loss += loss.item()
                 # Calculate accuracy
                 predictions = output_tensor.argmax(dim=-1).cpu().numpy().flatten()
-                labels = label_tensor.argmax(dim=-1).cpu().numpy().flatten()
+                labels = label_tensor.cpu().numpy().flatten()
                 num_correct += np.sum(predictions == labels)
                 num_total += len(labels)
 

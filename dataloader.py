@@ -95,7 +95,6 @@ class NotewiseDataset(Dataset):
 
         example = torch.tensor(example, dtype=torch.int64, device=torch.device('cpu'))
         label = torch.tensor(label, dtype=torch.int64, device=torch.device('cpu'))
-        label = F.one_hot(label, num_classes=self.vocab_size)
 
         return example, label
 
