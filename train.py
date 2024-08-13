@@ -110,6 +110,7 @@ if __name__ == '__main__':
         optimizer = Adam(model.parameters(), lr=lr)
     elif model_str == 'rnn-plain':
         model = RNNPlain(
+            device,
             input_vocab_size=vocab_size,
             embedding_size=embedding_size,
             hidden_size=hidden_size,
