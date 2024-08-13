@@ -12,7 +12,7 @@ from utils import log
 
 
 class RNNPlain(nn.Module):
-    def __init__(self, device, input_vocab_size: int, embedding_size=128, hidden_size=256, dropout_rate=0.1, nl=4, *args, **kwargs):
+    def __init__(self, device, device_str, input_vocab_size: int, embedding_size=128, hidden_size=256, dropout_rate=0.1, nl=4, *args, **kwargs):
         super(RNNPlain, self).__init__(*args, **kwargs)
 
         self.embedding = nn.Embedding(input_vocab_size, embedding_size)
@@ -21,6 +21,7 @@ class RNNPlain(nn.Module):
 
         self.dropout = nn.Dropout(dropout_rate)
         self.device = device
+        self.device_str = device_str
 
     def forward(self, x):
         embedded = self.dropout(self.embedding(x))

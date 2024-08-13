@@ -111,6 +111,7 @@ if __name__ == '__main__':
     elif model_str == 'rnn-plain':
         model = RNNPlain(
             device,
+            device_str,
             input_vocab_size=vocab_size,
             embedding_size=embedding_size,
             hidden_size=hidden_size,
