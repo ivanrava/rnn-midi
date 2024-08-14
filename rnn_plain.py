@@ -143,7 +143,7 @@ class RNNPlain(nn.Module):
         self.eval()
 
         with torch.no_grad():
-            batched_input = torch.tensor(sequence).unsqueeze(0)
+            batched_input = torch.tensor(sequence).unsqueeze(0).to(self.device)
             with autocast(self.device_str):
                 output_tensor = self(batched_input)
                 predictions = output_tensor
