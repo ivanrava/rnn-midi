@@ -26,8 +26,9 @@ class RNNPlain(nn.Module):
     def forward(self, x):
         embedded = self.dropout(self.embedding(x))
         output, hidden = self.lstm(embedded)
+        output = output[:, -1, :] # Keep last output
         output = self.expansion(output)
-        output = F.log_softmax(output, dim=2)
+        output = F.log_softmax(output, dim=1)
         return output
 
     def train_model(self, train_batches, val_batches, epochs: int, optimizer, criterion, scaler):
