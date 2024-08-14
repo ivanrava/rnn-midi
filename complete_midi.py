@@ -44,6 +44,8 @@ def encode_sequence(model: RNNPlain, sequence: list):
 
 
 if __name__ == '__main__':
+    dataloader.set_seed()
+
     filename = 'datasets/examples/moonlite.mid'
     modelfile = 'best_model.pt'
     sequence_length = 10
