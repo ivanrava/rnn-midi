@@ -59,6 +59,7 @@ if __name__ == '__main__':
     chordwise, notewise = complete_midi(filename)
     representation = notewise if extension == '.notewise' else chordwise
     sequence = representation.split(' ')[:-(sequence_length-to_guess)]
+    sequence = [vocabulary[word] for word in sequence]
 
     model = load_rnn_plain(modelfile, vocab_size)
 
