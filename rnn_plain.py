@@ -146,6 +146,6 @@ class RNNPlain(nn.Module):
             batched_input = torch.tensor(sequence).unsqueeze(0)
             with autocast(self.device_str):
                 output_tensor = self(batched_input)
-                predictions = output_tensor.argmax(dim=-1)
+                predictions = output_tensor
 
-        return predictions
+        return predictions.cpu().numpy()
