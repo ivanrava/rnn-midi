@@ -119,7 +119,7 @@ class RNNPlain(nn.Module):
         num_total = len(labels)
         return num_correct, num_total
 
-    def generate(self, test_batches):
+    def test_model(self, test_batches):
         self.eval()
 
         test_preds = []
@@ -137,3 +137,14 @@ class RNNPlain(nn.Module):
                 test_labels.extend(target_tensor.cpu().numpy().flatten())
 
         return test_preds, test_labels
+
+    def generate_new_note(self, sequence):
+        self.eval()
+
+        with torch.no_grad():
+            batched_input = torch.tensor(sequence).unsqueeze(0)
+            with autocast(self.device_str):
+                output_tensor = self(batched_input)
+                predictions = output_tensor.argmax(dim=-1)
+
+        return predictions
