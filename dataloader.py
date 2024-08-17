@@ -100,31 +100,22 @@ class NotewiseDataset(Dataset):
         return example, label
 
 class TripletDataset:
-    def __init__(self, window_len: int = 32, notes_to_guess: int = 1, folder: str = 'datasets/merged'):
+    def __init__(self, pms, window_len: int = 32, notes_to_guess: int = 1):
         self.midis = []
         self._window_len = window_len
         self._notes_to_guess = notes_to_guess
 
-        log("Reading MIDI files...")
-        filenames = glob.glob(f'{folder}/**/*.mid*')
-        total = 0
-        valid = 0
-        for filename in tqdm.tqdm(filenames):
-            pm = pretty_midi.PrettyMIDI(filename)
-            total += 1
-            for i,instr in enumerate(pm.instruments):
-                if i >= 2:
-                    break
-                if instr.program > 8:
-                    break
-            else:
-                self.midi_to_notes(pm)
-                valid += 1
-        log(f"MIDI files read: {valid} valid out of {total} ({valid/total*100}%)")
+        log("Expanding note data through PM...")
+        for pm in tqdm.tqdm(pms):
+            self.midis.append(self.midi_to_notes(pm))
+        log("Notes expanded!")
 
-    def midi_to_notes(self, pm: pretty_midi.PrettyMIDI) -> pd.DataFrame:
+    def midi_to_notes(self, pm: pretty_midi.PrettyMIDI):
         parsed_notes = []
-        sorted_notes = sorted([instrument.notes for instrument in pm.instruments], key=lambda note: note.start)
+        unsorted_notes = []
+        for instr in pm.instruments:
+            unsorted_notes += instr.notes
+        sorted_notes = sorted(unsorted_notes, key=lambda n: n.start)
         prev_start = sorted_notes[0].start
 
         for note in sorted_notes:
@@ -171,8 +162,8 @@ class TripletDataset:
         example = designed_window[:-self._notes_to_guess]
         label = designed_window[self._window_len-self._notes_to_guess:]
 
-        example = torch.tensor(example, dtype=torch.int64, device=torch.device('cpu'))
-        label = torch.tensor(label, dtype=torch.int64, device=torch.device('cpu'))
+        example = torch.tensor(example, device=torch.device('cpu'))
+        label = torch.tensor(label, device=torch.device('cpu'))
 
         return example, label
 
@@ -263,6 +254,34 @@ def build_split_loaders(
     test_loader = build_dataloader(NotewiseDataset(test_docs, vocab, vocab_size, window_len, to_guess), batch_size=batch_size)
 
     return train_loader, val_loader, test_loader, vocab_size
+
+def build_split_loaders_triplet(train_perc=0.8, val_perc=0.1, test_perc=0.1,
+        window_len: int = 10, to_guess: int = 1, batch_size: int = 16):
+    log("Reading MIDI files...")
+    filenames = glob.glob(f'datasets/merged/**/*.mid*')[:200]
+    pms = []
+    total = 0
+    valid = 0
+    for filename in tqdm.tqdm(filenames):
+        pm = pretty_midi.PrettyMIDI(filename)
+        total += 1
+        for i, instr in enumerate(pm.instruments):
+            if i >= 2:
+                break
+            if instr.program > 8:
+                break
+        else:
+            pms.append(pm)
+            valid += 1
+    log(f"MIDI files read: {valid} valid out of {total} ({valid / total * 100}%)")
+    train_pms, val_pms, test_pms = split_list(pms, train_perc, val_perc, test_perc)
+
+    train_loader = build_dataloader(TripletDataset(train_pms, window_len, to_guess), batch_size=batch_size)
+    val_loader = build_dataloader(TripletDataset(val_pms, window_len, to_guess), batch_size=batch_size)
+    test_loader = build_dataloader(TripletDataset(test_pms, window_len, to_guess), batch_size=batch_size)
+
+    return train_loader, val_loader, test_loader
+
 
 if __name__ == '__main__':
     set_seed()

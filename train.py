@@ -3,9 +3,10 @@ from torch import nn, GradScaler
 from torch.optim import Adam
 import wandb
 
-from dataloader import set_seed, build_split_loaders
+from dataloader import set_seed, build_split_loaders, build_split_loaders_triplet
 from encoder_decoder import EncDecWords, EncoderWords, DecoderWords
 from rnn_plain import RNNPlain
+from rnn_triplet import RNNTriplet
 from utils import log
 
 if __name__ == '__main__':
@@ -16,7 +17,8 @@ if __name__ == '__main__':
     log(f"Performing training on {device}")
 
     #model_str = "encoder-decoder"
-    model_str = "rnn-plain"
+    #model_str = "rnn-plain"
+    model_str = "rnn-triplet"
 
     embedding_size = 256
     hidden_size = 512
@@ -79,12 +81,18 @@ if __name__ == '__main__':
 
     log(f'Batch size: {batch_size}')
 
-    train_loader, val_loader, test_loader, vocab_size = build_split_loaders(
-        dataset_sampling_frequency, dataset_format,
-        train_perc=train_ratio, val_perc=val_ratio, test_perc=test_ratio,
-        window_len=whole_sequence_length, to_guess=to_guess, batch_size=batch_size,
-        limit_genres=limit_genres, max_docs_per_genre=max_docs_per_genre
-    )
+    if model_str == 'rnn-plain':
+        train_loader, val_loader, test_loader, vocab_size = build_split_loaders(
+            dataset_sampling_frequency, dataset_format,
+            train_perc=train_ratio, val_perc=val_ratio, test_perc=test_ratio,
+            window_len=whole_sequence_length, to_guess=to_guess, batch_size=batch_size,
+            limit_genres=limit_genres, max_docs_per_genre=max_docs_per_genre
+        )
+    elif model_str == 'rnn-triplet':
+        train_loader, val_loader, test_loader, vocab_size = build_split_loaders_triplet(
+            train_perc=train_ratio, val_perc=val_ratio, test_perc=test_ratio,
+            window_len=whole_sequence_length, to_guess=to_guess, batch_size=batch_size,
+        )
 
     model = None
     optimizer = None
@@ -118,6 +126,17 @@ if __name__ == '__main__':
             dropout_rate=dropout_rate,
             nl=lstm_layers
         ).to(device)
+        optimizer = Adam(model.parameters(), lr=lr)
+    elif model_str == 'rnn-triplet':
+        model = RNNTriplet(
+            device,
+            device_str,
+            input_vocab_size=96,
+            embedding_size=embedding_size,
+            hidden_size=hidden_size,
+            dropout_rate=dropout_rate,
+            nl=lstm_layers
+        )
         optimizer = Adam(model.parameters(), lr=lr)
 
     log(f"Starting training for {epochs} epochs...")
