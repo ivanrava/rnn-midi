@@ -1,10 +1,11 @@
+import glob
 import os
 import random
 import sys
 
 import numpy as np
+import pretty_midi
 import torch
-import torch.nn.functional as F
 from torch.utils.data import Dataset, DataLoader
 import tqdm
 
@@ -98,30 +99,89 @@ class NotewiseDataset(Dataset):
 
         return example, label
 
-    """
-    def convert_word(self, word: str):
-        wait_slice = np.zeros(self.max_wait - self.min_wait + 1)
-        note_slice = np.zeros(self.max_note - self.min_note + 1)
-        if word.startswith('p'):
-            note_index = int(word.lstrip('p'))
-            note_slice[note_index - self.min_note] = 1
-        elif word.startswith('endp'):
-            note_index = int(word.lstrip('endp'))
-            note_slice[note_index - self.min_note] = -1
-        elif word == 'wait':
-            raise Exception("Unexpected word")
-        elif word.startswith('wait'):
-            wait_index = int(word.lstrip('wait'))
-            wait_slice[wait_index - self.min_wait] = 1
-        return np.concatenate((wait_slice, note_slice), axis=0)
-    """
+class TripletDataset:
+    def __init__(self, window_len: int = 32, notes_to_guess: int = 1, folder: str = 'datasets/merged'):
+        self.midis = []
+        self._window_len = window_len
+        self._notes_to_guess = notes_to_guess
+
+        log("Reading MIDI files...")
+        filenames = glob.glob(f'{folder}/**/*.mid*')
+        total = 0
+        valid = 0
+        for filename in tqdm.tqdm(filenames):
+            pm = pretty_midi.PrettyMIDI(filename)
+            total += 1
+            for i,instr in enumerate(pm.instruments):
+                if i >= 2:
+                    break
+                if instr.program > 8:
+                    break
+            else:
+                self.midi_to_notes(pm)
+                valid += 1
+        log(f"MIDI files read: {valid} valid out of {total} ({valid/total*100}%)")
+
+    def midi_to_notes(self, pm: pretty_midi.PrettyMIDI) -> pd.DataFrame:
+        parsed_notes = []
+        sorted_notes = sorted([instrument.notes for instrument in pm.instruments], key=lambda note: note.start)
+        prev_start = sorted_notes[0].start
+
+        for note in sorted_notes:
+            start = note.start
+            end = note.end
+            parsed_notes.append([
+                note.pitch, # Pitch
+                start - prev_start, # Step
+                end - start # Duration
+            ])
+            prev_start = start
+
+        return parsed_notes
+
+    def num_windows(self, midi):
+        return len(midi) - self._window_len
+
+    def __len__(self):
+        return sum([self.num_windows(midi) for midi in self.midis])
+
+    def reset_memoized_window_indexes(self):
+        self.current_windows = 0
+        self.current_doc_idx = 0
+
+    def item_idx_to_local_window(self, item_idx: int):
+        windows = self.current_windows
+        starting_doc_idx = self.current_doc_idx
+        for doc in self.midis[starting_doc_idx:]:
+            local_windows = self.num_windows(doc)
+            if item_idx <= windows + local_windows:
+                local_idx = item_idx - windows
+                return doc[local_idx:local_idx + self._window_len]
+            else:
+                windows += local_windows
+                self.current_windows = windows
+                self.current_doc_idx += 1
+
+        self.reset_memoized_window_indexes()
+        return self.item_idx_to_local_window(item_idx)
+
+    def __getitem__(self, idx):
+        designed_window = self.item_idx_to_local_window(idx)
+
+        example = designed_window[:-self._notes_to_guess]
+        label = designed_window[self._window_len-self._notes_to_guess:]
+
+        example = torch.tensor(example, dtype=torch.int64, device=torch.device('cpu'))
+        label = torch.tensor(label, dtype=torch.int64, device=torch.device('cpu'))
+
+        return example, label
 
 class MidiDataLoader(DataLoader):
     def __iter__(self):
         self.dataset.reset_memoized_window_indexes()
         return super().__iter__()
 
-def build_dataloader(dataset: NotewiseDataset, batch_size=16) -> DataLoader:
+def build_dataloader(dataset: NotewiseDataset|TripletDataset, batch_size=16) -> DataLoader:
     log("Building dataloader...")
     loader = MidiDataLoader(dataset, batch_size=batch_size)
     log(f"Dataloader built: {len(loader)} batches")
