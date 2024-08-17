@@ -258,7 +258,7 @@ def build_split_loaders(
 def build_split_loaders_triplet(train_perc=0.8, val_perc=0.1, test_perc=0.1,
         window_len: int = 10, to_guess: int = 1, batch_size: int = 16):
     log("Reading MIDI files...")
-    filenames = glob.glob(f'datasets/merged/**/*.mid*')[:200]
+    filenames = glob.glob(f'datasets/merged/**/*.mid*')
     pms = []
     total = 0
     valid = 0
