@@ -143,7 +143,7 @@ if __name__ == '__main__':
             hidden_size=hidden_size,
             dropout_rate=dropout_rate,
             nl=lstm_layers
-        )
+        ).to(device)
         optimizer = Adam(model.parameters(), lr=lr)
     elif model_str == 'rnn-timedistributed':
         model = RNNTD(
@@ -154,7 +154,7 @@ if __name__ == '__main__':
             hidden_size=hidden_size,
             dropout_rate=dropout_rate,
             nl=lstm_layers
-        )
+        ).to(device)
         optimizer = Adam(model.parameters(), lr=lr)
 
     log(f"Starting training for {epochs} epochs...")
