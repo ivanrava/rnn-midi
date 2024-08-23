@@ -322,12 +322,12 @@ def build_vocab(docs_dict: dict, augment: int = 12):
                 if augment and not word.startswith('wait'):
                     for t in range(0,augment):
                         offset = t-augment/2
-                        note_value = int(word[1:])
+                        note_value = int(word[1 if word.startswith('p') else 4:])
                         note_value += offset
                         if 0 <= note_value <= 95:
-                            word = f'{word[0]}{note_value}'
-                            if word not in vocab:
-                                vocab[word] = vocab_size
+                            w = f'{word[0] if word.startswith("p") else "endp"}{note_value}'
+                            if w not in vocab:
+                                vocab[w] = vocab_size
                                 vocab_size += 1
                         else:
                             continue
