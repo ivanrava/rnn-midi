@@ -6,6 +6,7 @@ import wandb
 from dataloader import set_seed, build_split_loaders, build_split_loaders_triplet
 from encoder_decoder import EncDecWords, EncoderWords, DecoderWords
 from rnn_plain import RNNPlain
+from rnn_timedistributed import RNNTD
 from rnn_triplet import RNNTriplet
 from utils import log
 
@@ -17,23 +18,27 @@ if __name__ == '__main__':
     log(f"Performing training on {device}")
 
     #model_str = "encoder-decoder"
-    #model_str = "rnn-plain"
-    model_str = "rnn-triplet"
+    # model_str = "rnn-plain"
+    # model_str = "rnn-triplet"
+    model_str = "rnn-timedistributed"
 
     embedding_size = 256
     hidden_size = 512
     dropout_rate = .1
     lr = 1e-3
     epochs = 10
-    lstm_layers = 4
-    batch_size = 32
+    lstm_layers = 2
+    batch_size = 64
+
+    augment = False
 
     dataset_sampling_frequency = 'texts-12'
     dataset_format = '.notewise'
-    limit_genres = None
+    limit_genres = ['Classical']
     max_docs_per_genre = 0
 
-    criterion = nn.NLLLoss()
+    index_padding = 0
+    criterion = nn.NLLLoss(ignore_index=index_padding)
     scaler = GradScaler(device_str)
 
     whole_sequence_length = 10
@@ -65,6 +70,7 @@ if __name__ == '__main__':
             "dataset_format": dataset_format,
             "limit_genres": limit_genres,
             "max_docs_per_genre": max_docs_per_genre,
+            'augment': augment
         }
     )
 
@@ -81,12 +87,13 @@ if __name__ == '__main__':
 
     log(f'Batch size: {batch_size}')
 
-    if model_str == 'rnn-plain':
+    if model_str == 'rnn-plain' or model_str == 'rnn-timedistributed':
         train_loader, val_loader, test_loader, vocab_size = build_split_loaders(
             dataset_sampling_frequency, dataset_format,
             train_perc=train_ratio, val_perc=val_ratio, test_perc=test_ratio,
             window_len=whole_sequence_length, to_guess=to_guess, batch_size=batch_size,
-            limit_genres=limit_genres, max_docs_per_genre=max_docs_per_genre
+            limit_genres=limit_genres, max_docs_per_genre=max_docs_per_genre,
+            augment=augment
         )
     elif model_str == 'rnn-triplet':
         train_loader, val_loader, test_loader, vocab_size = build_split_loaders_triplet(
@@ -132,6 +139,17 @@ if __name__ == '__main__':
             device,
             device_str,
             input_vocab_size=96,
+            embedding_size=embedding_size,
+            hidden_size=hidden_size,
+            dropout_rate=dropout_rate,
+            nl=lstm_layers
+        )
+        optimizer = Adam(model.parameters(), lr=lr)
+    elif model_str == 'rnn-timedistributed':
+        model = RNNTD(
+            device,
+            device_str,
+            input_vocab_size=vocab_size,
             embedding_size=embedding_size,
             hidden_size=hidden_size,
             dropout_rate=dropout_rate,
