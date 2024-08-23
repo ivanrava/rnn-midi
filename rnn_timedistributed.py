@@ -42,7 +42,7 @@ class RNNTD(nn.Module):
 
         self.embedding = nn.Embedding(input_vocab_size, embedding_size)
         self.lstm = nn.LSTM(embedding_size, hidden_size, batch_first=True, num_layers=nl)
-        self.expansion = nn.Linear(hidden_size, input_vocab_size)
+        self.expansion = TimeDistributed(nn.Linear(hidden_size, input_vocab_size))
 
         self.dropout = nn.Dropout(dropout_rate)
         self.device = device
@@ -52,7 +52,7 @@ class RNNTD(nn.Module):
         embedded = self.dropout(self.embedding(x))
         output, hidden = self.lstm(embedded)
         output = self.expansion(output)
-        output = F.log_softmax(output, dim=1)
+        output = F.log_softmax(output, dim=-1)
         return output
 
     def train_model(self, train_batches, val_batches, epochs: int, optimizer, criterion, scaler):
