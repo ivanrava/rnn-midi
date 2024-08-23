@@ -75,7 +75,7 @@ class NotewiseNonOverlappingDataset(Dataset):
         return sum([self.num_windows(doc) for doc in self.docs])
 
     def num_windows(self, doc):
-        return np.ceil(len(doc) / self._window_len)
+        return int(np.ceil(len(doc) / self._window_len))
 
     def reset_memoized_window_indexes(self):
         self.current_windows = 0
