@@ -329,6 +329,8 @@ def build_vocab(docs_dict: dict, augment: int = 12):
                             if word not in vocab:
                                 vocab[word] = vocab_size
                                 vocab_size += 1
+                        else:
+                            continue
                 else:
                     if word not in vocab:
                         vocab[word] = vocab_size
