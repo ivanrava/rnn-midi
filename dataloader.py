@@ -11,6 +11,9 @@ import tqdm
 
 from utils import log
 
+PAD_TOKEN = '<PAD>'
+PAD_IDX = 0
+
 
 def set_seed(seed = 1337):
     torch.manual_seed(seed)
@@ -20,6 +23,84 @@ def set_seed(seed = 1337):
     np.random.seed(seed)
     random.seed(seed)
     os.environ['PYTHONHASHSEED'] = str(seed)
+
+class NotewiseNonOverlappingDataset(Dataset):
+    def __init__(self, midi_files: dict, vocab: dict, vocab_size: int, window_len: int = 10, notes_to_guess: int = 1, augment: bool = False):
+        self._window_len = window_len
+        self._notes_to_guess = notes_to_guess
+        self.vocab_size = vocab_size
+        self.should_augment = augment
+
+        self.reset_memoized_window_indexes()
+
+        # TODO: add genre
+        log("Augmenting documents...")
+        self.docs = []
+        for genre_docs_list in midi_files.values():
+            for doc in genre_docs_list:
+                self.docs += self.augment(doc, vocab)
+        log(f"Documents encoded!")
+
+    def augment(self, doc, vocab):
+        word_list = [w for w in doc.split(' ') if w != '']
+        augmented_docs = []
+        for transposition in range(0, 12) if self.should_augment else [6]:
+            augmented_doc = []
+            offset = transposition - 6
+            if offset == 0:
+                augmented_docs.append([vocab[w] for w in word_list])
+                continue
+            invalid = False
+            for word in word_list:
+                if word.startswith('wait'):
+                    augmented_doc.append(word)
+                    continue
+                note_value = int(word[1:])
+                note_value += offset
+                if note_value < 0 or note_value > 95:
+                    invalid = True
+                    break
+                augmented_doc.append(vocab[f'{word[0]}{note_value}'])
+            if not invalid:
+                augmented_docs.append(augmented_doc)
+        return augmented_docs
+
+    def __len__(self):
+        return sum([self.num_windows(doc) for doc in self.docs])
+
+    def num_windows(self, doc):
+        return np.ceil(len(doc) / self._window_len)
+
+    def reset_memoized_window_indexes(self):
+        self.current_windows = 0
+        self.current_doc_idx = 0
+
+    def item_idx_to_local_windows(self, item_idx: int):
+        windows = self.current_windows
+        starting_doc_idx = self.current_doc_idx
+        for doc in self.docs[starting_doc_idx:]:
+            local_windows = self.num_windows(doc)
+            if item_idx <= windows + local_windows:
+                local_idx = (item_idx - windows) * self._window_len
+                return doc[local_idx:local_idx + self._window_len], doc[local_idx+self._notes_to_guess:local_idx + self._window_len+self._notes_to_guess]
+            else:
+                windows += local_windows
+                self.current_windows = windows
+                self.current_doc_idx += 1
+
+        self.reset_memoized_window_indexes()
+        return self.item_idx_to_local_windows(item_idx)
+
+    def __getitem__(self, idx):
+        designed_window, designed_label = self.item_idx_to_local_windows(idx)
+
+        example = designed_window + [PAD_IDX] * (self._window_len - len(designed_window))
+        label = designed_label + [PAD_IDX] * (self._window_len - len(designed_label))
+
+        example = torch.tensor(example, dtype=torch.int64, device=torch.device('cpu'))
+        label = torch.tensor(label, dtype=torch.int64, device=torch.device('cpu'))
+
+        return example, label
 
 class NotewiseDataset(Dataset):
     def __init__(self, midi_files: dict, vocab: dict, vocab_size: int, window_len: int = 10, notes_to_guess: int = 1):
@@ -172,7 +253,7 @@ class MidiDataLoader(DataLoader):
         self.dataset.reset_memoized_window_indexes()
         return super().__iter__()
 
-def build_dataloader(dataset: NotewiseDataset|TripletDataset, batch_size=16) -> DataLoader:
+def build_dataloader(dataset: Dataset, batch_size=16) -> DataLoader:
     log("Building dataloader...")
     loader = MidiDataLoader(dataset, batch_size=batch_size)
     log(f"Dataloader built: {len(loader)} batches")
@@ -223,18 +304,29 @@ def split_documents_dict(documents: dict, p1: float, p2: float, _p3: float):
     return d1, d2, d3
 
 
-def build_vocab(docs_dict: dict):
+def build_vocab(docs_dict: dict, augment: bool = False):
     log("Building vocabulary...")
-    vocab = {}
-    vocab_size = 0
+    vocab = {PAD_TOKEN: PAD_IDX}
+    vocab_size = len(vocab)
     for genre_docs_list in docs_dict.values():
         for doc in genre_docs_list:
             for word in doc.split(' '):
                 if word == '':
                     continue
-                if word not in vocab:
-                    vocab[word] = vocab_size
-                    vocab_size += 1
+                if augment and not word.startswith('wait'):
+                    for t in range(0,12):
+                        offset = t-6
+                        note_value = int(word[1:])
+                        note_value += offset
+                        if 0 <= note_value <= 95:
+                            word = f'{word[0]}{note_value}'
+                            if word not in vocab:
+                                vocab[word] = vocab_size
+                                vocab_size += 1
+                else:
+                    if word not in vocab:
+                        vocab[word] = vocab_size
+                        vocab_size += 1
     log(f"Vocabolary built: {vocab_size} words")
     return vocab, vocab_size
 
@@ -244,14 +336,15 @@ def build_split_loaders(
         train_perc=0.8, val_perc=0.1, test_perc=0.1,
         window_len: int = 10, to_guess: int = 1, batch_size: int = 16,
         max_docs_per_genre: int = 0, limit_genres: list = None,
+        augment = False
     ):
     docs = read_documents(folder, extension, limit_genres=limit_genres, max_docs_per_genre=max_docs_per_genre)
     vocab, vocab_size = build_vocab(docs)
     train_docs, val_docs, test_docs = split_documents_dict(docs, train_perc, val_perc, test_perc)
 
-    train_loader = build_dataloader(NotewiseDataset(train_docs, vocab, vocab_size, window_len, to_guess), batch_size=batch_size)
-    val_loader = build_dataloader(NotewiseDataset(val_docs, vocab, vocab_size, window_len, to_guess), batch_size=batch_size)
-    test_loader = build_dataloader(NotewiseDataset(test_docs, vocab, vocab_size, window_len, to_guess), batch_size=batch_size)
+    train_loader = build_dataloader(NotewiseNonOverlappingDataset(train_docs, vocab, vocab_size, window_len, to_guess, augment=augment), batch_size=batch_size)
+    val_loader = build_dataloader(NotewiseNonOverlappingDataset(val_docs, vocab, vocab_size, window_len, to_guess), batch_size=batch_size)
+    test_loader = build_dataloader(NotewiseNonOverlappingDataset(test_docs, vocab, vocab_size, window_len, to_guess), batch_size=batch_size)
 
     return train_loader, val_loader, test_loader, vocab_size
 
