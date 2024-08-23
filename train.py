@@ -30,7 +30,7 @@ if __name__ == '__main__':
     lstm_layers = 2
     batch_size = 64
 
-    augment = False
+    augment = 0
 
     dataset_sampling_frequency = 'texts-12'
     dataset_format = '.notewise'

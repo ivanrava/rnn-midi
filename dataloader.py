@@ -24,12 +24,33 @@ def set_seed(seed = 1337):
     random.seed(seed)
     os.environ['PYTHONHASHSEED'] = str(seed)
 
+
+def augment_document(word_list, vocab, transposition, correction: int = 0):
+    augmented_doc = []
+    offset = transposition - correction
+    if offset == 0:
+        return [vocab[w] for w in word_list]
+    invalid = False
+    for word in word_list:
+        if word.startswith('wait'):
+            augmented_doc.append(vocab[word])
+            continue
+        note_value = int(word[1 if word.startswith("p") else 4:])
+        note_value += offset
+        if note_value < 0 or note_value > 95:
+            invalid = True
+            break
+        augmented_doc.append(vocab[f'{word[0] if word.startswith("p") else "endp"}{note_value}'])
+
+    return augmented_doc if not invalid else None
+
+
 class NotewiseNonOverlappingDataset(Dataset):
-    def __init__(self, midi_files: dict, vocab: dict, vocab_size: int, window_len: int = 10, notes_to_guess: int = 1, augment: bool = False):
+    def __init__(self, midi_files: dict, vocab: dict, vocab_size: int, window_len: int = 10, notes_to_guess: int = 1, augment: int = 12):
         self._window_len = window_len
         self._notes_to_guess = notes_to_guess
         self.vocab_size = vocab_size
-        self.should_augment = augment
+        self.augment_semitones = augment
 
         self.reset_memoized_window_indexes()
 
@@ -44,25 +65,10 @@ class NotewiseNonOverlappingDataset(Dataset):
     def augment(self, doc, vocab):
         word_list = [w for w in doc.split(' ') if w != '']
         augmented_docs = []
-        for transposition in range(0, 12) if self.should_augment else [6]:
-            augmented_doc = []
-            offset = transposition - 6
-            if offset == 0:
-                augmented_docs.append([vocab[w] for w in word_list])
-                continue
-            invalid = False
-            for word in word_list:
-                if word.startswith('wait'):
-                    augmented_doc.append(word)
-                    continue
-                note_value = int(word[1:])
-                note_value += offset
-                if note_value < 0 or note_value > 95:
-                    invalid = True
-                    break
-                augmented_doc.append(vocab[f'{word[0]}{note_value}'])
-            if not invalid:
-                augmented_docs.append(augmented_doc)
+        for transposition in range(0, self.augment_semitones) if self.augment_semitones > 0 else [0]:
+            augmented = augment_document(word_list, vocab, transposition, correction=int(self.augment_semitones / 2))
+            if augmented is not None:
+                augmented_docs.append(augmented)
         return augmented_docs
 
     def __len__(self):
@@ -304,7 +310,7 @@ def split_documents_dict(documents: dict, p1: float, p2: float, _p3: float):
     return d1, d2, d3
 
 
-def build_vocab(docs_dict: dict, augment: bool = False):
+def build_vocab(docs_dict: dict, augment: int = 12):
     log("Building vocabulary...")
     vocab = {PAD_TOKEN: PAD_IDX}
     vocab_size = len(vocab)
@@ -314,8 +320,8 @@ def build_vocab(docs_dict: dict, augment: bool = False):
                 if word == '':
                     continue
                 if augment and not word.startswith('wait'):
-                    for t in range(0,12):
-                        offset = t-6
+                    for t in range(0,augment):
+                        offset = t-augment/2
                         note_value = int(word[1:])
                         note_value += offset
                         if 0 <= note_value <= 95:
@@ -336,10 +342,10 @@ def build_split_loaders(
         train_perc=0.8, val_perc=0.1, test_perc=0.1,
         window_len: int = 10, to_guess: int = 1, batch_size: int = 16,
         max_docs_per_genre: int = 0, limit_genres: list = None,
-        augment = False
+        augment: int = 12
     ):
     docs = read_documents(folder, extension, limit_genres=limit_genres, max_docs_per_genre=max_docs_per_genre)
-    vocab, vocab_size = build_vocab(docs)
+    vocab, vocab_size = build_vocab(docs, augment=augment)
     train_docs, val_docs, test_docs = split_documents_dict(docs, train_perc, val_perc, test_perc)
 
     train_loader = build_dataloader(NotewiseNonOverlappingDataset(train_docs, vocab, vocab_size, window_len, to_guess, augment=augment), batch_size=batch_size)
