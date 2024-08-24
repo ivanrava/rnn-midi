@@ -50,7 +50,7 @@ def train_model():
         dropout_rate=wandb.config.dropout_rate,
         nl=wandb.config.lstm_layers
     ).to(device)
-    optimizer = Adam(model.parameters(), lr=wandb.config.lr)
+    optimizer = Adam(model.parameters(), lr=wandb.config.learning_rate)
     wandb.watch(model, log_freq=10000)
     index_padding = 0
     criterion = nn.NLLLoss(ignore_index=index_padding)
