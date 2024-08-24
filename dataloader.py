@@ -46,11 +46,20 @@ def augment_document(word_list, vocab, transposition, correction: int = 0):
 
 
 class NotewiseNonOverlappingDataset(Dataset):
-    def __init__(self, midi_files: dict, vocab: dict, vocab_size: int, window_len: int = 10, notes_to_guess: int = 1, augment: int = 0):
+    def __init__(self,
+                 midi_files: dict,
+                 vocab: dict,
+                 vocab_size: int,
+                 window_len: int = 10,
+                 notes_to_guess: int = 1,
+                 augment: int = 0,
+                 window_overlap: int = 1
+                 ):
         self._window_len = window_len
         self._notes_to_guess = notes_to_guess
         self.vocab_size = vocab_size
         self.augment_semitones = augment
+        self.window_overlap = window_overlap
 
         self.reset_memoized_window_indexes()
 
@@ -75,7 +84,7 @@ class NotewiseNonOverlappingDataset(Dataset):
         return sum([self.num_windows(doc) for doc in self.docs])
 
     def num_windows(self, doc):
-        return int(np.ceil(len(doc) / self._window_len))
+        return int(np.ceil(len(doc) / int(np.floor(self._window_len / self.window_overlap))))
 
     def reset_memoized_window_indexes(self):
         self.current_windows = 0
@@ -87,7 +96,7 @@ class NotewiseNonOverlappingDataset(Dataset):
         for doc in self.docs[starting_doc_idx:]:
             local_windows = self.num_windows(doc)
             if item_idx < windows + local_windows:
-                local_idx = (item_idx - windows) * self._window_len
+                local_idx = (item_idx - windows) * int(np.floor(self._window_len / self.window_overlap))
                 return doc[local_idx:local_idx + self._window_len], doc[local_idx+self._notes_to_guess:local_idx + self._window_len+self._notes_to_guess]
             else:
                 windows += local_windows
@@ -344,15 +353,16 @@ def build_split_loaders(
         train_perc=0.8, val_perc=0.1, test_perc=0.1,
         window_len: int = 10, to_guess: int = 1, batch_size: int = 16,
         max_docs_per_genre: int = 0, limit_genres: list = None,
-        augment: int = 12
+        augment: int = 12,
+        window_overlap: int = 1
     ):
     docs = read_documents(folder, extension, limit_genres=limit_genres, max_docs_per_genre=max_docs_per_genre)
     vocab, vocab_size = build_vocab(docs, augment=augment)
     train_docs, val_docs, test_docs = split_documents_dict(docs, train_perc, val_perc, test_perc)
 
-    train_loader = build_dataloader(NotewiseNonOverlappingDataset(train_docs, vocab, vocab_size, window_len, to_guess, augment=augment), batch_size=batch_size)
-    val_loader = build_dataloader(NotewiseNonOverlappingDataset(val_docs, vocab, vocab_size, window_len, to_guess), batch_size=batch_size)
-    test_loader = build_dataloader(NotewiseNonOverlappingDataset(test_docs, vocab, vocab_size, window_len, to_guess), batch_size=batch_size)
+    train_loader = build_dataloader(NotewiseNonOverlappingDataset(train_docs, vocab, vocab_size, window_len, to_guess, augment=augment, window_overlap=window_overlap), batch_size=batch_size)
+    val_loader = build_dataloader(NotewiseNonOverlappingDataset(val_docs, vocab, vocab_size, window_len, to_guess, window_overlap=window_overlap), batch_size=batch_size)
+    test_loader = build_dataloader(NotewiseNonOverlappingDataset(test_docs, vocab, vocab_size, window_len, to_guess, window_overlap=window_overlap), batch_size=batch_size)
 
     return train_loader, val_loader, test_loader, vocab_size
 

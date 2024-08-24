@@ -16,9 +16,10 @@ sweep_configuration = {
         "dropout_rate": {"max": 0.8, "min": 0.01},
         "learning_rate": {"values": [0.0001, 0.0003, 0.001, 0.003, 0.01]},
         "lstm_layers": {"values": [1, 2, 3, 4]},
-        "whole_sequence_length": {"values": [10, 25, 50, 100, 200]},
+        "whole_sequence_length": {"values": [16, 32, 64, 128, 256]},
         "batch_size": {"values": [4, 32, 64]},
-        'augment': {"values": [0, 4, 6, 8, 12]}
+        'augment': {"values": [0, 4, 6, 8, 12]},
+        'window_overlap': {"values": [1, 2, 4, 8, 16]}
     },
 }
 dataset_sampling_frequency = 'texts-12'
@@ -39,7 +40,7 @@ def train_model():
         train_perc=train_ratio, val_perc=val_ratio, test_perc=test_ratio,
         window_len=wandb.config.whole_sequence_length, to_guess=to_guess, batch_size=wandb.config.batch_size,
         limit_genres=limit_genres, max_docs_per_genre=max_docs_per_genre,
-        augment=wandb.config.augment
+        augment=wandb.config.augment, window_overlap=wandb.config.window_overlap
     )
     model = RNNTD(
         device,
