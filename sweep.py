@@ -8,16 +8,16 @@ from rnn_timedistributed import RNNTD
 
 count = 10
 sweep_configuration = {
-    "method": "random",
+    "method": "bayesian",
     "metric": {"goal": "maximize", "name": "val_accuracy"},
     "parameters": {
-        "embedding_size": {"values": [128,256,512]},
+        "embedding_size": {"values": [64,128,256,512]},
         "hidden_size": {"values": [128,256,512]},
         "dropout_rate": {"max": 0.8, "min": 0.01},
         "learning_rate": {"values": [0.0001, 0.0003, 0.001, 0.003, 0.01]},
         "lstm_layers": {"values": [1, 2, 3, 4]},
         "whole_sequence_length": {"values": [16, 32, 64, 128, 256]},
-        "batch_size": {"values": [4, 32, 64]},
+        "batch_size": {"values": [4, 16, 32, 64]},
         'augment': {"values": [0, 4, 6, 8, 12]},
         'window_overlap': {"values": [1, 2, 4, 8, 16]}
     },
