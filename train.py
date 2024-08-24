@@ -30,7 +30,7 @@ if __name__ == '__main__':
     lstm_layers = 2
     batch_size = 64
 
-    augment = 0
+    augment = 12
 
     dataset_sampling_frequency = 'texts-12'
     dataset_format = '.notewise'
@@ -41,7 +41,7 @@ if __name__ == '__main__':
     criterion = nn.NLLLoss(ignore_index=index_padding)
     scaler = GradScaler(device_str)
 
-    whole_sequence_length = 10
+    whole_sequence_length = 100
     to_guess = 1
 
     train_ratio = 0.8
