@@ -9,7 +9,7 @@ from rnn_timedistributed import RNNTD
 count = 10
 sweep_configuration = {
     "method": "random",
-    "metric": {"goal": "maximize", "name": "val_acc"},
+    "metric": {"goal": "maximize", "name": "val_accuracy"},
     "parameters": {
         "embedding_size": {"values": [128,256,512]},
         "hidden_size": {"values": [128,256,512]},
