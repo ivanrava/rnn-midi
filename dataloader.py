@@ -46,7 +46,7 @@ def augment_document(word_list, vocab, transposition, correction: int = 0):
 
 
 class NotewiseNonOverlappingDataset(Dataset):
-    def __init__(self, midi_files: dict, vocab: dict, vocab_size: int, window_len: int = 10, notes_to_guess: int = 1, augment: int = 12):
+    def __init__(self, midi_files: dict, vocab: dict, vocab_size: int, window_len: int = 10, notes_to_guess: int = 1, augment: int = 0):
         self._window_len = window_len
         self._notes_to_guess = notes_to_guess
         self.vocab_size = vocab_size
@@ -86,7 +86,7 @@ class NotewiseNonOverlappingDataset(Dataset):
         starting_doc_idx = self.current_doc_idx
         for doc in self.docs[starting_doc_idx:]:
             local_windows = self.num_windows(doc)
-            if item_idx <= windows + local_windows:
+            if item_idx < windows + local_windows:
                 local_idx = (item_idx - windows) * self._window_len
                 return doc[local_idx:local_idx + self._window_len], doc[local_idx+self._notes_to_guess:local_idx + self._window_len+self._notes_to_guess]
             else:
@@ -99,6 +99,8 @@ class NotewiseNonOverlappingDataset(Dataset):
 
     def __getitem__(self, idx):
         designed_window, designed_label = self.item_idx_to_local_windows(idx)
+        if len(designed_window) < self._window_len:
+            designed_window[-1] = PAD_IDX
 
         example = designed_window + [PAD_IDX] * (self._window_len - len(designed_window))
         label = designed_label + [PAD_IDX] * (self._window_len - len(designed_label))
@@ -320,8 +322,8 @@ def build_vocab(docs_dict: dict, augment: int = 12):
                 if word == '':
                     continue
                 if augment and not word.startswith('wait'):
-                    for t in range(0,augment):
-                        offset = t-augment/2
+                    for t in range(0,augment) if augment > 0 else [0]:
+                        offset = int(t-augment/2)
                         note_value = int(word[1 if word.startswith('p') else 4:])
                         note_value += offset
                         if 0 <= note_value <= 95:
@@ -329,8 +331,6 @@ def build_vocab(docs_dict: dict, augment: int = 12):
                             if w not in vocab:
                                 vocab[w] = vocab_size
                                 vocab_size += 1
-                        else:
-                            continue
                 else:
                     if word not in vocab:
                         vocab[word] = vocab_size
