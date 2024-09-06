@@ -8,7 +8,7 @@ from rnn_timedistributed import RNNTD
 
 count = 10
 sweep_configuration = {
-    "method": "bayesian",
+    "method": "bayes",
     "metric": {"goal": "maximize", "name": "val_accuracy"},
     "parameters": {
         "embedding_size": {"values": [64,128,256,512]},
@@ -19,7 +19,7 @@ sweep_configuration = {
         "whole_sequence_length": {"values": [16, 32, 64, 128, 256]},
         "batch_size": {"values": [4, 16, 32, 64]},
         'augment': {"values": [0, 4, 6, 8, 12]},
-        'window_overlap': {"values": [1, 2, 4, 8, 16]}
+        'window_dodge': {"values": [1, 2, 4, 8, 16]}
     },
 }
 dataset_sampling_frequency = 'texts-12'
