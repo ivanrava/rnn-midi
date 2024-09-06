@@ -276,6 +276,9 @@ def build_dataloader(dataset: Dataset, batch_size=16) -> DataLoader:
     log(f"Dataloader built: {len(loader)} batches")
     return loader
 
+def complex_midi(full_filename: str):
+    return os.path.exists(f'datasets/merged/{full_filename}.midi')
+
 def read_documents(texts_folder: str, extension: str, limit_genres: list = None, max_docs_per_genre: int = 0) -> dict:
     log("Reading MIDI documents...")
 
@@ -285,7 +288,7 @@ def read_documents(texts_folder: str, extension: str, limit_genres: list = None,
         if limit_genres is not None and genre not in limit_genres:
             continue
         for file in tqdm.tqdm(files if max_docs_per_genre == 0 else files[:max_docs_per_genre], leave=False):
-            if file.endswith(extension):
+            if file.endswith(extension) and not complex_midi(os.path.join(root, file).replace(texts_folder, "").strip(extension)):
                 try:
                     with open(os.path.join(root, file), 'r') as f:
                         if genre in documents:
