@@ -17,7 +17,7 @@ sweep_configuration = {
         "learning_rate": {"max": 0.01, "min": 0.0001},
         "lstm_layers": {"values": [1, 2, 3, 4]},
         "whole_sequence_length": {"values": [16, 32, 64, 128, 256]},
-        'augment': {"max": 0, "min": 24},
+        'augment': {"max": 24, "min": 0},
         'window_dodge': {"values": [1, 2, 4, 8, 16, 32, 64, 128, 256]}
     },
 }
