@@ -11,15 +11,14 @@ sweep_configuration = {
     "method": "bayes",
     "metric": {"goal": "maximize", "name": "val_accuracy"},
     "parameters": {
-        "embedding_size": {"values": [64,128,256,512]},
-        "hidden_size": {"values": [128,256,512]},
-        "dropout_rate": {"max": 0.8, "min": 0.01},
-        "learning_rate": {"values": [0.0001, 0.0003, 0.001, 0.003, 0.01]},
+        "embedding_size": {"values": [128,256,512,1024]},
+        "hidden_size": {"values": [256,512,1024]},
+        "dropout_rate": {"max": 0.6, "min": 0.01},
+        "learning_rate": {"max": 0.01, "min": 0.0001},
         "lstm_layers": {"values": [1, 2, 3, 4]},
         "whole_sequence_length": {"values": [16, 32, 64, 128, 256]},
-        "batch_size": {"values": [4, 16, 32, 64]},
-        'augment': {"values": [0, 4, 6, 8, 12]},
-        'window_dodge': {"values": [1, 2, 4, 8, 16]}
+        'augment': {"max": 0, "min": 24},
+        'window_dodge': {"values": [1, 2, 4, 8, 16, 32, 64, 128, 256]}
     },
 }
 dataset_sampling_frequency = 'texts-12'
@@ -38,9 +37,9 @@ def train_model():
     train_loader, val_loader, test_loader, vocab_size = build_split_loaders(
         dataset_sampling_frequency, dataset_format,
         train_perc=train_ratio, val_perc=val_ratio, test_perc=test_ratio,
-        window_len=wandb.config.whole_sequence_length, to_guess=to_guess, batch_size=wandb.config.batch_size,
+        window_len=wandb.config.whole_sequence_length, to_guess=to_guess, batch_size=64,
         limit_genres=limit_genres, max_docs_per_genre=max_docs_per_genre,
-        augment=wandb.config.augment, window_overlap=wandb.config.window_overlap
+        augment=wandb.config.augment, window_dodge=wandb.config.window_dodge
     )
     model = RNNTD(
         device,
@@ -57,7 +56,7 @@ def train_model():
     criterion = nn.NLLLoss(ignore_index=index_padding)
     scaler = GradScaler(device_str)
     train_losses, accuracies, val_losses, best_epoch, best_val_loss = model.train_model(
-        train_loader, val_loader, 5, optimizer, criterion, scaler
+        train_loader, val_loader, 3, optimizer, criterion, scaler
     )
 
 if __name__ == '__main__':

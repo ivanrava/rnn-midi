@@ -22,11 +22,11 @@ if __name__ == '__main__':
     # model_str = "rnn-triplet"
     model_str = "rnn-timedistributed"
 
-    embedding_size = 256
+    embedding_size = 512
     hidden_size = 512
-    dropout_rate = .1
+    dropout_rate = .2
     lr = 1e-3
-    epochs = 10
+    epochs = 5
     lstm_layers = 2
     batch_size = 64
 
@@ -41,7 +41,8 @@ if __name__ == '__main__':
     criterion = nn.NLLLoss(ignore_index=index_padding)
     scaler = GradScaler(device_str)
 
-    whole_sequence_length = 100
+    whole_sequence_length = 128
+    window_dodge = 32
     to_guess = 1
 
     train_ratio = 0.8
@@ -93,7 +94,7 @@ if __name__ == '__main__':
             train_perc=train_ratio, val_perc=val_ratio, test_perc=test_ratio,
             window_len=whole_sequence_length, to_guess=to_guess, batch_size=batch_size,
             limit_genres=limit_genres, max_docs_per_genre=max_docs_per_genre,
-            augment=augment
+            augment=augment, window_dodge=window_dodge
         )
     elif model_str == 'rnn-triplet':
         train_loader, val_loader, test_loader, vocab_size = build_split_loaders_triplet(
