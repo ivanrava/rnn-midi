@@ -11,7 +11,17 @@ def literature_metrics(score: music21.stream.Score):
     """
     Compute some established metrics
     :param score: Music21 Score
-    :return: % of empty bars, (mean) unique pitch classes per bar, tone distance, % of >= 16th, % of >= 32nd, % of > semibreve, % of > breve
+    :return: % of empty bars,
+            (mean) unique pitch classes per bar,
+            tone distance,
+            % of >= 16th,
+            % of >= 32nd,
+            % of > semibreve,
+            % of > breve,
+            keypresses per measure,
+            % not tuplets,
+            % triplets,
+            % other tuplets
     """
     def store_pitch(pitch_map, pitch: music21.pitch.Pitch, curr_min, curr_max):
         if pitch not in pitch_map:
@@ -33,6 +43,11 @@ def literature_metrics(score: music21.stream.Score):
     notes = 0
     min_tone = 200
     max_tone = -1
+
+    not_tuplets = 0
+    triplets = 0
+    other_tuplets = 0
+
     for m in measures:
         notes_in_measure = m.flatten().notes
         if len(notes_in_measure) == 0:
@@ -47,6 +62,14 @@ def literature_metrics(score: music21.stream.Score):
                     min_tone, max_tone = store_pitch(pitches, p, min_tone, max_tone)
             else:
                 min_tone, max_tone = store_pitch(pitches, n.pitch, min_tone, max_tone)
+            if len(n.duration.tuplets) == 0:
+                not_tuplets += 1
+            elif len(n.duration.tuplets) > 1:
+                other_tuplets += 1
+            elif n.duration.tuplets[0].tupletMultiplier() == '2/3':
+                triplets += 1
+            else:
+                other_tuplets += 1
             if n.duration.quarterLength > 0.1:
                 qn32 += 1
                 if n.duration.quarterLength > 0.2:
@@ -66,7 +89,11 @@ def literature_metrics(score: music21.stream.Score):
         qn32 / notes,
         qn16 / notes,
         morethansb / notes,
-        morethanbreve / notes
+        morethanbreve / notes,
+        notes / measures_with_notes,
+        not_tuplets / notes,
+        triplets / notes,
+        other_tuplets / notes
     )
 
 
@@ -74,6 +101,7 @@ def aggregate_stats(filename):
     s = music21.converter.parse(filename)
     metrics = literature_metrics(s)
     key = s.analyze('key')
+    coeffs = [k.correlationCoefficient for k in key.alternateInterpretations]
     return {'eb': metrics[0],
             'upc': metrics[1],
             'td': metrics[2],
@@ -81,12 +109,17 @@ def aggregate_stats(filename):
             'qn32': metrics[4],
             'qnsb': metrics[5],
             'qnb': metrics[6],
-            'keycoeff': key.correlationCoefficient}
+            'kppm': metrics[7],
+            'not_tuplets': metrics[8],
+            'triplets': metrics[9],
+            'other_tuplets': metrics[10],
+            'keycoeff_std': np.std(coeffs),
+            'keycoeff_max': key.correlationCoefficient}
 
-def compute_metrics(folder):
+def compute_metrics(folder, leave=True):
     filenames = glob.glob(f'{folder}/*.mid')
     data = []
-    for f in tqdm.tqdm(filenames):
+    for f in tqdm.tqdm(filenames, leave=leave):
         data.append(aggregate_stats(f))
     return pd.DataFrame(data)
 
