@@ -446,26 +446,61 @@ def train_encdec():
 
 
 if __name__ == '__main__':
-    wandb.init(
-        project='rnn-midi',
-        config={
-            "model": "encoder-decoder",
-            "embedding_size": 1024,
-            "hidden_size": 1024,
-            "dropout_rate": .2,
-            "learning_rate": 1e-3,
-            "epochs": 10,
-            "lstm_layers": 2,
-            "whole_sequence_length": 128,
-            "to_guess": 1,
-            "train_perc": 0.8,
-            "val_perc": 0.1,
-            "test_perc": 0.1,
-            "batch_size": 64,
-            "dataset": "texts-12",
-            "limit_genres": None,
-            "max_docs_per_genre": 0,
-            'augment': 12
+    if True:
+        wandb.init(
+            project='rnn-midi',
+            config={
+                "model": "encoder-decoder",
+                "embedding_size": 1024,
+                "hidden_size": 1024,
+                "dropout_rate": .2,
+                "lr": 1e-3,
+                "epochs": 10,
+                "lstm_layers": 2,
+                "whole_sequence_length": 128,
+                "to_guess": 1,
+                "train_ratio": 0.8,
+                "val_ratio": 0.1,
+                "test_ratio": 0.1,
+                "batch_size": 64,
+                "dataset": "texts-12",
+                "limit_genres": None,
+                "max_docs_per_genre": 0,
+                "augment": 12,
+                "window_dodge": 8
+            }
+        )
+        train_encdec()
+    else:
+        wandb.init(
+            project='rnn-midi',
+            config={
+                "model": "encoder-decoder",
+                "epochs": 3,
+                "to_guess": 1,
+                "train_ratio": 0.8,
+                "val_ratio": 0.1,
+                "test_ratio": 0.1,
+                "batch_size": 64,
+                "dataset": "texts-12",
+                "limit_genres": None,
+                "max_docs_per_genre": 0,
+            }
+        )
+        count = 20
+        sweep_configuration = {
+            "method": "bayes",
+            "metric": {"goal": "minimize", "name": "val_loss"},
+            "parameters": {
+                "embedding_size": {"values": [128, 256, 512, 1024, 2048]},
+                "hidden_size": {"values": [256, 512, 1024, 2048]},
+                "dropout_rate": {"max": 0.6, "min": 0.01},
+                "lr": {"max": 0.01, "min": 0.0001},
+                "lstm_layers": {"values": [1, 2]},
+                "whole_sequence_length": {"values": [16, 32, 64, 128, 256]},
+                "augment": {"min": 0, "max": 24},
+                "window_dodge": {"values": [1, 2, 4, 8, 16, 32, 64, 128, 256]}
+            },
         }
-    )
-    train_encdec()
+        sweep_id = wandb.sweep(sweep=sweep_configuration, project="rnn-midi")
+        wandb.agent(sweep_id, function=train_encdec, count=count)
