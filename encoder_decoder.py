@@ -156,21 +156,21 @@ class EncDecWords(nn.Module):
 
         return train_losses, accuracies, val_losses, best_ep, best_val_loss
 
-    def quality_metrics(self, val_batches, vocab_reverse, events_to_generate=20):
+    def quality_metrics(self, ce_batches, vocab_reverse, events_final=200):
         self.eval()
 
         with torch.no_grad():
-            for batch in tqdm(val_batches, leave=False):
-                song_tensor, _ = [x.to(self.device) for x in batch]
+            for batch in tqdm(ce_batches, leave=False):
+                song_tensor = batch.to(self.device)
                 seq_len = song_tensor.size(1)
-                while song_tensor.size(1) < events_to_generate:
+                while song_tensor.size(1) < events_final:
                     with autocast(self.device_str):
-                        output_tensor = self(song_tensor[:,:-seq_len])
+                        output_tensor = self(song_tensor[:,-seq_len:], None)
                     # (64, 10, 220) -> (64, 10, 1)
-                    output_tensor = output_tensor.argmax(dim=-1).cpu().numpy()
+                    output_tensor = output_tensor.argmax(dim=-1)
                     # (64, 118, 1?) + (64, 10, 1?)
                     song_tensor = torch.cat([song_tensor, output_tensor], dim=1)
-                for i,song in enumerate(song_tensor):
+                for i,song in enumerate(song_tensor.cpu().numpy()):
                     # (500, 1)
                     song_tr = [vocab_reverse[w] for w in song]
                     render_notewise.render_notewise(song_tr, f"/tmp/comp_eval_metrics/{i}.mid")
@@ -189,7 +189,7 @@ class EncDecWords(nn.Module):
                 input_tensor, label_tensor = [x.to(self.device) for x in batch]
 
                 with autocast(self.device_str):
-                    output_tensor = self(input_tensor)
+                    output_tensor = self(input_tensor, None)
                     loss = criterion(output_tensor.view(-1, output_tensor.size(-1)), label_tensor.view(-1))
 
                 val_loss += loss.item()
@@ -218,7 +218,7 @@ class EncDecWords(nn.Module):
                 input_tensor, target_tensor = [b.to(self.device) for b in batch]
 
                 with autocast(self.device_str):
-                    output_tensor = self(input_tensor)
+                    output_tensor = self(input_tensor, None)
                     predictions = output_tensor.argmax(dim=-1)
 
                 test_preds.extend(predictions.cpu().numpy().flatten())
@@ -394,7 +394,7 @@ def build_split_loaders(
     val_loader = build_dataloader(NFollowingDataset(val_docs, window_len, to_guess, window_dodge=1), batch_size=batch_size)
     test_loader = build_dataloader(NFollowingDataset(test_docs, window_len, to_guess, window_dodge=1), batch_size=batch_size)
 
-    comp_eval_loader = DataLoader(CompletionEvalDataset(val_docs), batch_size=batch_size)
+    comp_eval_loader = DataLoader(CompletionEvalDataset(val_docs, window_len-to_guess), batch_size=batch_size)
 
     return train_loader, val_loader, test_loader, comp_eval_loader, vocab
 
