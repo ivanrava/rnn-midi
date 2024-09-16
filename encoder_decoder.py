@@ -13,6 +13,8 @@ from torch.utils.data import DataLoader, Dataset
 from tqdm import tqdm
 import wandb
 
+import metrics
+import render_notewise
 from dataloader import set_seed
 from utils import log
 
@@ -91,7 +93,7 @@ class EncDecWords(nn.Module):
 
         return decoder_outputs
 
-    def train_model(self, train_batches, val_batches, epochs: int, optimizer, criterion, scaler):
+    def train_model(self, train_batches, val_batches, comp_eval_batches, vocab_reverse, epochs: int, optimizer, criterion, scaler):
         train_losses = []
         accuracies = []
         val_losses = []
@@ -133,11 +135,15 @@ class EncDecWords(nn.Module):
             accuracies.append(accuracy)
             val_losses.append(val_loss)
 
+            df_metrics = self.quality_metrics(comp_eval_batches, vocab_reverse)
+            metrics_dict = {k: float(v) for k, v in {**df_metrics.mean()}.items() if not k.startswith('Unnamed')}
+
             wandb.log({
                 "train_loss": train_losses[-1],
                 "train_accuracy": num_correct / num_total,
                 "val_loss": val_loss,
-                "val_accuracy": accuracy
+                "val_accuracy": accuracy,
+                **metrics_dict
             })
 
             if val_loss < best_val_loss:
@@ -149,6 +155,27 @@ class EncDecWords(nn.Module):
             torch.save(best_model, "best_model.pt")
 
         return train_losses, accuracies, val_losses, best_ep, best_val_loss
+
+    def quality_metrics(self, val_batches, vocab_reverse, events_to_generate=20):
+        self.eval()
+
+        with torch.no_grad():
+            for batch in tqdm(val_batches, leave=False):
+                song_tensor, _ = [x.to(self.device) for x in batch]
+                seq_len = song_tensor.size(1)
+                while song_tensor.size(1) < events_to_generate:
+                    with autocast(self.device_str):
+                        output_tensor = self(song_tensor[:,:-seq_len])
+                    # (64, 10, 220) -> (64, 10, 1)
+                    output_tensor = output_tensor.argmax(dim=-1).cpu().numpy()
+                    # (64, 118, 1?) + (64, 10, 1?)
+                    song_tensor = torch.cat([song_tensor, output_tensor], dim=1)
+                for i,song in enumerate(song_tensor):
+                    # (500, 1)
+                    song_tr = [vocab_reverse[w] for w in song]
+                    render_notewise.render_notewise(song_tr, f"/tmp/comp_eval_metrics/{i}.mid")
+
+        return metrics.compute_metrics("/tmp/comp_eval_metrics", leave=False)
 
     def eval_model(self, val_batches, criterion):
         self.eval()
@@ -162,7 +189,7 @@ class EncDecWords(nn.Module):
                 input_tensor, label_tensor = [x.to(self.device) for x in batch]
 
                 with autocast(self.device_str):
-                    output_tensor = self(input_tensor, label_tensor)
+                    output_tensor = self(input_tensor)
                     loss = criterion(output_tensor.view(-1, output_tensor.size(-1)), label_tensor.view(-1))
 
                 val_loss += loss.item()
@@ -191,7 +218,7 @@ class EncDecWords(nn.Module):
                 input_tensor, target_tensor = [b.to(self.device) for b in batch]
 
                 with autocast(self.device_str):
-                    output_tensor = self(input_tensor, target_tensor)
+                    output_tensor = self(input_tensor)
                     predictions = output_tensor.argmax(dim=-1)
 
                 test_preds.extend(predictions.cpu().numpy().flatten())
@@ -251,6 +278,20 @@ class NFollowingDataset(Dataset):
 
         return example, label
 
+class CompletionEvalDataset(Dataset):
+    def __init__(self, docs: list, maxlen: int = 100):
+        self.docs = []
+        for d in docs:
+            start = d[:maxlen]
+            if len(start) == maxlen:
+                self.docs.append(d[:maxlen])
+
+    def __len__(self):
+        return len(self.docs)
+
+    def __getitem__(self, idx):
+        return torch.tensor(self.docs[idx], dtype=torch.int64, device=torch.device('cpu'))
+
 def read_documents(texts_folder: str, limit_genres: list = None, max_docs_per_genre: int = 0) -> list:
     log("Reading MIDI documents...")
 
@@ -287,7 +328,7 @@ def build_vocab(docs: list):
                 vocab[word] = vocab_size
                 vocab_size += 1
     log(f"Vocabolary built: {vocab_size} words")
-    return vocab, vocab_size
+    return vocab
 
 def split_list(lst: list, p1: float, p2: float, _p3: float):
     random.shuffle(lst)
@@ -344,7 +385,7 @@ def build_split_loaders(
     if augment > 0:
         train_docs = augment_docs(train_docs, augment)
         random.shuffle(train_docs)
-    vocab, vocab_size = build_vocab(train_docs + val_docs + test_docs)
+    vocab = build_vocab(train_docs + val_docs + test_docs)
     train_docs = [[vocab[w] for w in doc if w != ''] for doc in train_docs]
     val_docs = [[vocab[w] for w in doc if w != ''] for doc in val_docs]
     test_docs = [[vocab[w] for w in doc if w != ''] for doc in test_docs]
@@ -353,7 +394,9 @@ def build_split_loaders(
     val_loader = build_dataloader(NFollowingDataset(val_docs, window_len, to_guess, window_dodge=1), batch_size=batch_size)
     test_loader = build_dataloader(NFollowingDataset(test_docs, window_len, to_guess, window_dodge=1), batch_size=batch_size)
 
-    return train_loader, val_loader, test_loader, vocab_size
+    comp_eval_loader = DataLoader(CompletionEvalDataset(val_docs), batch_size=batch_size)
+
+    return train_loader, val_loader, test_loader, comp_eval_loader, vocab
 
 def train_encdec():
     set_seed()
@@ -363,7 +406,7 @@ def train_encdec():
     index_padding = 0
     criterion = nn.NLLLoss(ignore_index=index_padding)
 
-    train_loader, val_loader, test_loader, vocab_size = build_split_loaders(
+    train_loader, val_loader, test_loader, comp_eval_loader, vocab = build_split_loaders(
         wandb.config.dataset,
         train_perc=wandb.config.train_ratio,
         val_perc=wandb.config.val_ratio,
@@ -378,7 +421,7 @@ def train_encdec():
     )
 
     encoder = EncoderWords(
-        input_vocab_size=vocab_size,
+        input_vocab_size=len(vocab),
         embedding_size=wandb.config.embedding_size,
         hidden_size=wandb.config.hidden_size,
         dropout_rate=wandb.config.dropout_rate,
@@ -387,7 +430,7 @@ def train_encdec():
     decoder = DecoderWords(
         wandb.config.to_guess,
         device,
-        vocab_size,
+        len(vocab),
         embedding_size=wandb.config.embedding_size,
         hidden_size=wandb.config.hidden_size,
         dropout_rate=wandb.config.dropout_rate,
@@ -398,7 +441,7 @@ def train_encdec():
     optimizer = Adam(model.parameters(), lr=wandb.config.lr)
 
     train_losses, accuracies, val_losses, best_epoch, best_val_loss = model.train_model(
-        train_loader, val_loader, wandb.config.epochs, optimizer, criterion, scaler
+        train_loader, val_loader, comp_eval_loader, {num:word for word, num in vocab.items()}, wandb.config.epochs, optimizer, criterion, scaler
     )
 
 
