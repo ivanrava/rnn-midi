@@ -355,64 +355,74 @@ def build_split_loaders(
 
     return train_loader, val_loader, test_loader, vocab_size
 
-if __name__ == '__main__':
+def train_encdec():
     set_seed()
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     scaler = GradScaler('cuda' if torch.cuda.is_available() else 'cpu')
 
-    embedding_size = 512
-    hidden_size = 512
-    dropout_rate = .2
-    lr = 1e-3
-    epochs = 5
-    lstm_layers = 2
-    batch_size = 64
-
-    augment = 12
-
-    dataset_sampling_frequency = 'texts-12'
-    limit_genres = ['Classical']
-    max_docs_per_genre = 0
-
     index_padding = 0
     criterion = nn.NLLLoss(ignore_index=index_padding)
 
-    whole_sequence_length = 128
-    window_dodge = 32
-    to_guess = 1
-
-    train_ratio = 0.8
-    val_ratio = 0.1
-    test_ratio = 0.1
-
     train_loader, val_loader, test_loader, vocab_size = build_split_loaders(
-        dataset_sampling_frequency,
-        train_perc=train_ratio, val_perc=val_ratio, test_perc=test_ratio,
-        window_len=whole_sequence_length, to_guess=to_guess, batch_size=batch_size,
-        limit_genres=limit_genres, max_docs_per_genre=max_docs_per_genre,
-        augment=augment, window_dodge=window_dodge
+        wandb.config.dataset,
+        train_perc=wandb.config.train_ratio,
+        val_perc=wandb.config.val_ratio,
+        test_perc=wandb.config.test_ratio,
+        window_len=wandb.config.whole_sequence_length,
+        to_guess=wandb.config.to_guess,
+        batch_size=wandb.config.batch_size,
+        limit_genres=wandb.config.limit_genres,
+        max_docs_per_genre=wandb.config.max_docs_per_genre,
+        augment=wandb.config.augment,
+        window_dodge=wandb.config.window_dodge
     )
 
     encoder = EncoderWords(
         input_vocab_size=vocab_size,
-        embedding_size=embedding_size,
-        hidden_size=hidden_size,
-        dropout_rate=dropout_rate,
-        nl=lstm_layers
+        embedding_size=wandb.config.embedding_size,
+        hidden_size=wandb.config.hidden_size,
+        dropout_rate=wandb.config.dropout_rate,
+        nl=wandb.config.lstm_layers
     )
     decoder = DecoderWords(
-        to_guess,
+        wandb.config.to_guess,
         device,
         vocab_size,
-        embedding_size=embedding_size,
-        hidden_size=hidden_size,
-        dropout_rate=dropout_rate,
-        nl=lstm_layers
+        embedding_size=wandb.config.embedding_size,
+        hidden_size=wandb.config.hidden_size,
+        dropout_rate=wandb.config.dropout_rate,
+        nl=wandb.config.lstm_layers
     )
 
     model = EncDecWords(encoder, decoder, device, 'cuda' if torch.cuda.is_available() else 'cpu').to(device)
-    optimizer = Adam(model.parameters(), lr=lr)
+    optimizer = Adam(model.parameters(), lr=wandb.config.lr)
 
     train_losses, accuracies, val_losses, best_epoch, best_val_loss = model.train_model(
-        train_loader, val_loader, epochs, optimizer, criterion, scaler
+        train_loader, val_loader, wandb.config.epochs, optimizer, criterion, scaler
     )
+
+
+if __name__ == '__main__':
+    wandb.init(
+        project='rnn-midi',
+        config={
+            "model": "encoder-decoder",
+            "embedding_size": 1024,
+            "hidden_size": 1024,
+            "dropout_rate": .2,
+            "learning_rate": 1e-3,
+            "epochs": 10,
+            "lstm_layers": 2,
+            "whole_sequence_length": 128,
+            "to_guess": 1,
+            "train_perc": 0.8,
+            "val_perc": 0.1,
+            "test_perc": 0.1,
+            "batch_size": 64,
+            "dataset": "texts-12",
+            "limit_genres": None,
+            "max_docs_per_genre": 0,
+            'augment': 12
+        }
+    )
+    train_encdec()
