@@ -12,11 +12,11 @@ from utils import log
 
 
 class EncoderWords(nn.Module):
-    def __init__(self, input_vocab_size: int, embedding_size=128, hidden_size=256, dropout_rate=0.1, nl=4, *args, **kwargs):
+    def __init__(self, input_vocab_size: int, embedding_size=1024, hidden_size=1024, dropout_rate=0.2, nl=2, *args, **kwargs):
         super(EncoderWords, self).__init__(*args, **kwargs)
 
         self.embedding = nn.Embedding(input_vocab_size, embedding_size)
-        self.lstm = nn.LSTM(embedding_size, hidden_size, batch_first=True, num_layers=nl)
+        self.lstm = nn.LSTM(embedding_size, hidden_size, batch_first=True, num_layers=nl, dropout=dropout_rate)
 
         self.dropout = nn.Dropout(dropout_rate)
 
@@ -26,11 +26,11 @@ class EncoderWords(nn.Module):
         return output, hidden
 
 class DecoderWords(nn.Module):
-    def __init__(self, num_guesses, device, output_size, embedding_size=128, hidden_size=256, dropout_rate=0.1, nl=4, *args, **kwargs):
+    def __init__(self, num_guesses, device, output_size, embedding_size=1024, hidden_size=1024, dropout_rate=0.1, nl=2, *args, **kwargs):
         super(DecoderWords, self).__init__(*args, **kwargs)
 
         self.embedding = nn.Embedding(output_size, embedding_size)
-        self.lstm = nn.LSTM(embedding_size, hidden_size, batch_first=True, num_layers=nl)
+        self.lstm = nn.LSTM(embedding_size, hidden_size, batch_first=True, num_layers=nl, dropout=dropout_rate)
         self.expansion = nn.Linear(hidden_size, output_size)
 
         self.num_guesses = num_guesses
@@ -55,6 +55,7 @@ class DecoderWords(nn.Module):
             decoder_outputs.append(decoder_output)
 
             if label_tensor is not None:
+                # Teacher forcing
                 decoder_input = label_tensor[:, i].unsqueeze(1)
             else:
                 _, topi = decoder_output.topk(1)
