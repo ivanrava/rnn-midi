@@ -1,14 +1,23 @@
 import copy
+import os
+import random
+import sys
 
 import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch import autocast
+from torch import autocast, GradScaler
+from torch.optim import Adam
+from torch.utils.data import DataLoader, Dataset
 from tqdm import tqdm
 import wandb
 
+from dataloader import set_seed
 from utils import log
+
+PAD_IDX = 0
+PAD_TOKEN = '<PAD>'
 
 
 class EncoderWords(nn.Module):
@@ -189,3 +198,222 @@ class EncDecWords(nn.Module):
                 test_labels.extend(target_tensor.cpu().numpy().flatten())
 
         return test_preds, test_labels
+
+
+class NFollowingDataset(Dataset):
+    def __init__(self,
+                 docs: list,
+                 window_len: int = 10,
+                 notes_to_guess: int = 1,
+                 window_dodge: int = 1):
+        self.docs = docs
+        self._window_len = window_len
+        self._notes_to_guess = notes_to_guess
+        self._window_dodge = window_dodge
+
+    def __len__(self):
+        return sum([self.num_windows(doc) for doc in self.docs])
+
+    def num_windows(self, doc):
+        return int(np.ceil(len(doc) / int(np.floor(self._window_len / self._window_dodge))))
+
+    def reset_memoized_window_indexes(self):
+        self.current_windows = 0
+        self.current_doc_idx = 0
+
+    def item_idx_to_local_windows(self, item_idx: int):
+        windows = self.current_windows
+        starting_doc_idx = self.current_doc_idx
+        for doc in self.docs[starting_doc_idx:]:
+            local_windows = self.num_windows(doc)
+            if item_idx < windows + local_windows:
+                local_idx = item_idx - windows
+                local_idx *= self._window_dodge
+                return doc[local_idx:local_idx + self._window_len], doc[local_idx+self._notes_to_guess:local_idx + self._window_len+self._notes_to_guess]
+            else:
+                windows += local_windows
+                self.current_windows = windows
+                self.current_doc_idx += 1
+
+        self.reset_memoized_window_indexes()
+        return self.item_idx_to_local_windows(item_idx)
+
+    def __getitem__(self, idx):
+        designed_window, designed_label = self.item_idx_to_local_windows(idx)
+        if len(designed_window) < self._window_len:
+            designed_window + [PAD_IDX] * (self._window_len - len(designed_window))
+
+        example = designed_window[:-self._notes_to_guess]
+        label = designed_window[-self._notes_to_guess:]
+
+        example = torch.tensor(example, dtype=torch.int64, device=torch.device('cpu'))
+        label = torch.tensor(label, dtype=torch.int64, device=torch.device('cpu'))
+
+        return example, label
+
+def read_documents(texts_folder: str, limit_genres: list = None, max_docs_per_genre: int = 0) -> list:
+    log("Reading MIDI documents...")
+
+    documents = {}
+    for root, _, files in tqdm(os.walk(texts_folder)):
+        genre = root.split('/')[-1]
+        if limit_genres is not None and genre not in limit_genres:
+            continue
+        for file in tqdm(files if max_docs_per_genre == 0 else files[:max_docs_per_genre], leave=False):
+            if file.endswith('.notewise'):
+                try:
+                    with open(os.path.join(root, file), 'r') as f:
+                        if genre in documents:
+                            documents[genre].append(f.read())
+                        else:
+                            documents[genre] = [f.read()]
+                except Exception as e:
+                    print(e)
+
+    log(f"Documents read: {sum([len(documents[g]) for g in documents])} totalling {sum([sum([sys.getsizeof(d) for d in documents[g]]) for g in documents]) / 10**6 } MB")
+    log(f'Genres: {len(documents)}')
+
+    return [doc for genre in documents for doc in documents[genre]]
+
+def build_vocab(docs: list):
+    log("Building vocabulary...")
+    vocab = {PAD_TOKEN: PAD_IDX}
+    vocab_size = len(vocab)
+    for doc in tqdm(docs):
+        for word in tqdm(doc, leave=False):
+            if word == '':
+                continue
+            if word not in vocab:
+                vocab[word] = vocab_size
+                vocab_size += 1
+    log(f"Vocabolary built: {vocab_size} words")
+    return vocab, vocab_size
+
+def split_list(lst: list, p1: float, p2: float, _p3: float):
+    random.shuffle(lst)
+    len1 = int(len(lst) * p1)
+    len2 = int(len(lst) * p2)
+
+    sublist1 = lst[:len1]
+    sublist2 = lst[len1:len1+len2]
+    sublist3 = lst[len1+len2:]
+
+    return sublist1, sublist2, sublist3
+
+def augment_docs(docs: list, augment: int = 12, max_note: int = 119) -> list:
+    augmented_docs = []
+    for doc in tqdm(docs):
+        for t in tqdm(range(0, augment), leave=False):
+            augmented_doc = []
+            offset = int(t - augment / 2)
+            for word in tqdm(doc, leave=False):
+                if word == '':
+                    continue
+                if word.startswith('wait'):
+                    augmented_doc.append(word)
+                else:
+                    sep_index = 1 if word.startswith('p') else 4
+                    prefix, note_value = word[:sep_index], int(word[sep_index:])
+                    note_value += offset
+                    if 0 <= note_value <= max_note:
+                        augmented_doc.append(f'{prefix}{note_value}')
+            augmented_docs.append(augmented_doc)
+    return augmented_docs
+
+class MidiDataLoader(DataLoader):
+    def __iter__(self):
+        self.dataset.reset_memoized_window_indexes()
+        return super().__iter__()
+
+def build_dataloader(dataset: Dataset, batch_size=64) -> DataLoader:
+    log("Building dataloader...")
+    loader = MidiDataLoader(dataset, batch_size=batch_size)
+    log(f"Dataloader built: {len(loader)} batches")
+    return loader
+
+def build_split_loaders(
+        folder: str,
+        train_perc=0.8, val_perc=0.1, test_perc=0.1,
+        window_len: int = 10, to_guess: int = 1, batch_size: int = 16,
+        max_docs_per_genre: int = 0, limit_genres: list = None,
+        augment: int = 12,
+        window_dodge: int = 1
+):
+    docs = read_documents(folder, limit_genres, max_docs_per_genre)
+    train_docs, val_docs, test_docs = split_list(docs, train_perc, val_perc, test_perc)
+    if augment > 0:
+        train_docs = augment_docs(train_docs, augment)
+        random.shuffle(train_docs)
+    vocab, vocab_size = build_vocab(train_docs + val_docs + test_docs)
+    train_docs = [vocab[w] for w in train_docs]
+    val_docs = [vocab[w] for w in val_docs]
+    test_docs = [vocab[w] for w in test_docs]
+
+    train_loader = build_dataloader(NFollowingDataset(train_docs, window_len, to_guess, window_dodge), batch_size=batch_size)
+    val_loader = build_dataloader(NFollowingDataset(val_docs, window_len, to_guess, window_dodge=1), batch_size=batch_size)
+    test_loader = build_dataloader(NFollowingDataset(test_docs, window_len, to_guess, window_dodge=1), batch_size=batch_size)
+
+    return train_loader, val_loader, test_loader, vocab_size
+
+if __name__ == '__main__':
+    set_seed()
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    scaler = GradScaler('cuda' if torch.cuda.is_available() else 'cpu')
+
+
+    embedding_size = 512
+    hidden_size = 512
+    dropout_rate = .2
+    lr = 1e-3
+    epochs = 5
+    lstm_layers = 2
+    batch_size = 64
+
+    augment = 12
+
+    dataset_sampling_frequency = 'texts-12'
+    limit_genres = ['Classical']
+    max_docs_per_genre = 0
+
+    index_padding = 0
+    criterion = nn.NLLLoss(ignore_index=index_padding)
+
+    whole_sequence_length = 128
+    window_dodge = 32
+    to_guess = 1
+
+    train_ratio = 0.8
+    val_ratio = 0.1
+    test_ratio = 0.1
+
+    train_loader, val_loader, test_loader, vocab_size = build_split_loaders(
+        dataset_sampling_frequency,
+        train_perc=train_ratio, val_perc=val_ratio, test_perc=test_ratio,
+        window_len=whole_sequence_length, to_guess=to_guess, batch_size=batch_size,
+        limit_genres=limit_genres, max_docs_per_genre=max_docs_per_genre,
+        augment=augment, window_dodge=window_dodge
+    )
+
+    encoder = EncoderWords(
+        input_vocab_size=vocab_size,
+        embedding_size=embedding_size,
+        hidden_size=hidden_size,
+        dropout_rate=dropout_rate,
+        nl=lstm_layers
+    )
+    decoder = DecoderWords(
+        to_guess,
+        device,
+        vocab_size,
+        embedding_size=embedding_size,
+        hidden_size=hidden_size,
+        dropout_rate=dropout_rate,
+        nl=lstm_layers
+    )
+
+    model = EncDecWords(encoder, decoder, device, 'cuda' if torch.cuda.is_available() else 'cpu').to(device)
+    optimizer = Adam(model.parameters(), lr=lr)
+
+    train_losses, accuracies, val_losses, best_epoch, best_val_loss = model.train_model(
+        train_loader, val_loader, epochs, optimizer, criterion, scaler
+    )
