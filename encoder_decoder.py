@@ -215,7 +215,7 @@ class NFollowingDataset(Dataset):
         return sum([self.num_windows(doc) for doc in self.docs])
 
     def num_windows(self, doc):
-        return int(np.ceil(len(doc) / int(np.floor(self._window_len / self._window_dodge))))
+        return int(np.ceil((len(doc) - self._window_len) / self._window_dodge))
 
     def reset_memoized_window_indexes(self):
         self.current_windows = 0
@@ -241,7 +241,7 @@ class NFollowingDataset(Dataset):
     def __getitem__(self, idx):
         designed_window, designed_label = self.item_idx_to_local_windows(idx)
         if len(designed_window) < self._window_len:
-            designed_window + [PAD_IDX] * (self._window_len - len(designed_window))
+            designed_window += [PAD_IDX] * (self._window_len - len(designed_window))
 
         example = designed_window[:-self._notes_to_guess]
         label = designed_window[-self._notes_to_guess:]
@@ -264,9 +264,9 @@ def read_documents(texts_folder: str, limit_genres: list = None, max_docs_per_ge
                 try:
                     with open(os.path.join(root, file), 'r') as f:
                         if genre in documents:
-                            documents[genre].append(f.read())
+                            documents[genre].append(f.read().split(" "))
                         else:
-                            documents[genre] = [f.read()]
+                            documents[genre] = [f.read().split(" ")]
                 except Exception as e:
                     print(e)
 
@@ -345,9 +345,9 @@ def build_split_loaders(
         train_docs = augment_docs(train_docs, augment)
         random.shuffle(train_docs)
     vocab, vocab_size = build_vocab(train_docs + val_docs + test_docs)
-    train_docs = [vocab[w] for w in train_docs]
-    val_docs = [vocab[w] for w in val_docs]
-    test_docs = [vocab[w] for w in test_docs]
+    train_docs = [[vocab[w] for w in doc if w != ''] for doc in train_docs]
+    val_docs = [[vocab[w] for w in doc if w != ''] for doc in val_docs]
+    test_docs = [[vocab[w] for w in doc if w != ''] for doc in test_docs]
 
     train_loader = build_dataloader(NFollowingDataset(train_docs, window_len, to_guess, window_dodge), batch_size=batch_size)
     val_loader = build_dataloader(NFollowingDataset(val_docs, window_len, to_guess, window_dodge=1), batch_size=batch_size)
@@ -359,7 +359,6 @@ if __name__ == '__main__':
     set_seed()
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     scaler = GradScaler('cuda' if torch.cuda.is_available() else 'cpu')
-
 
     embedding_size = 512
     hidden_size = 512
