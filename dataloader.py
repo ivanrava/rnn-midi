@@ -1,13 +1,11 @@
-import glob
 import os
 import random
 import sys
 
 import numpy as np
-import pretty_midi
 import torch
-from torch.utils.data import Dataset, DataLoader
 import tqdm
+from torch.utils.data import Dataset, DataLoader
 
 from utils import log
 
@@ -31,13 +29,13 @@ def augment_document(word_list, vocab, transposition, correction: int = 0):
     if offset == 0:
         return [vocab[w] for w in word_list]
     invalid = False
-    for word in word_list:
+    for word in tqdm.tqdm(word_list, leave=False):
         if word.startswith('wait'):
             augmented_doc.append(vocab[word])
             continue
         note_value = int(word[1 if word.startswith("p") else 4:])
         note_value += offset
-        if note_value < 0 or note_value > 95:
+        if note_value < 0 or note_value > 119: # 95
             invalid = True
             break
         augmented_doc.append(vocab[f'{word[0] if word.startswith("p") else "endp"}{note_value}'])
@@ -66,8 +64,8 @@ class NotewiseNonOverlappingDataset(Dataset):
         # TODO: add genre
         log("Augmenting documents...")
         self.docs = []
-        for genre_docs_list in midi_files.values():
-            for doc in genre_docs_list:
+        for genre_docs_list in tqdm.tqdm(midi_files.values()):
+            for doc in tqdm.tqdm(genre_docs_list, leave=False):
                 self.docs += self.augment(doc, vocab)
         log(f"Documents encoded!")
 
@@ -84,7 +82,7 @@ class NotewiseNonOverlappingDataset(Dataset):
         return sum([self.num_windows(doc) for doc in self.docs])
 
     def num_windows(self, doc):
-        return int(np.ceil(len(doc) / int(np.floor(self._window_len / self.window_dodge))))
+        return int(np.floor((len(doc) - self._window_len) / self.window_dodge)) + 1
 
     def reset_memoized_window_indexes(self):
         self.current_windows = 0
@@ -117,152 +115,6 @@ class NotewiseNonOverlappingDataset(Dataset):
 
         example = torch.tensor(example, dtype=torch.int64, device=torch.device('cpu'))
         label = torch.tensor(label, dtype=torch.int64, device=torch.device('cpu'))
-
-        return example, label
-
-class NotewiseDataset(Dataset):
-    def __init__(self, midi_files: dict, vocab: dict, vocab_size: int, window_len: int = 10, notes_to_guess: int = 1):
-        self._window_len = window_len
-        self._notes_to_guess = notes_to_guess
-        self.vocab_size = vocab_size
-
-        self.reset_memoized_window_indexes()
-
-        # TODO: add genre
-        log("Encoding documents with vocabulary...")
-        self.docs = []
-        for genre_docs_list in midi_files.values():
-            for doc in genre_docs_list:
-                word_list = []
-                for word in doc.split(' '):
-                    if word in vocab:
-                        word_list.append(vocab[word])
-                self.docs.append(word_list)
-        log(f"Documents encoded: {len(self.docs)} with {sum([len(doc) for doc in self.docs])} words")
-
-        """
-        self.min_wait = min([int(w.lstrip('wait')) for w in unique_words if w.startswith('wait')])
-        self.max_wait = max([int(w.lstrip('wait')) for w in unique_words if w.startswith('wait')])
-        self.min_note = min([int(w.lstrip('p')) for w in unique_words if w.startswith('p')])
-        self.max_note = max([int(w.lstrip('p')) for w in unique_words if w.startswith('p')])
-        log(f"Min wait: {self.min_wait}")
-        log(f"Max wait: {self.max_wait}")
-        log(f"Min note: {self.min_note}")
-        log(f"Max note: {self.max_note}")
-        """
-
-        """
-        log("Converting words into numbers...")
-        word_list = [self.convert_word(word, max_wait, max_note, min_wait, min_note) for word in word_list]
-        word_list = torch.tensor(word_list, dtype=torch.int64, device=torch.device('cpu'))
-        log("Tensors created!")
-        log(f"Unfolding into {self._window_len} words windows...")
-        self.tensors = word_list.unfold(0, self._window_len, 1)
-        log("Unfolded / windowed!")
-        """
-
-    def __len__(self):
-        return sum([self.num_windows(doc) for doc in self.docs])
-
-    def num_windows(self, doc):
-        return len(doc) - self._window_len
-
-    def reset_memoized_window_indexes(self):
-        self.current_windows = 0
-        self.current_doc_idx = 0
-
-    def item_idx_to_local_window(self, item_idx: int):
-        windows = self.current_windows
-        starting_doc_idx = self.current_doc_idx
-        for doc in self.docs[starting_doc_idx:]:
-            local_windows = self.num_windows(doc)
-            if item_idx <= windows + local_windows:
-                local_idx = item_idx - windows
-                return doc[local_idx:local_idx + self._window_len]
-            else:
-                windows += local_windows
-                self.current_windows = windows
-                self.current_doc_idx += 1
-
-        self.reset_memoized_window_indexes()
-        return self.item_idx_to_local_window(item_idx)
-
-    def __getitem__(self, idx):
-        designed_window = self.item_idx_to_local_window(idx)
-
-        example = designed_window[:-self._notes_to_guess]
-        label = designed_window[self._window_len-self._notes_to_guess:]
-
-        example = torch.tensor(example, dtype=torch.int64, device=torch.device('cpu'))
-        label = torch.tensor(label, dtype=torch.int64, device=torch.device('cpu'))
-
-        return example, label
-
-class TripletDataset:
-    def __init__(self, pms, window_len: int = 32, notes_to_guess: int = 1):
-        self.midis = []
-        self._window_len = window_len
-        self._notes_to_guess = notes_to_guess
-
-        log("Expanding note data through PM...")
-        for pm in tqdm.tqdm(pms):
-            self.midis.append(self.midi_to_notes(pm))
-        log("Notes expanded!")
-
-    def midi_to_notes(self, pm: pretty_midi.PrettyMIDI):
-        parsed_notes = []
-        unsorted_notes = []
-        for instr in pm.instruments:
-            unsorted_notes += instr.notes
-        sorted_notes = sorted(unsorted_notes, key=lambda n: n.start)
-        prev_start = sorted_notes[0].start
-
-        for note in sorted_notes:
-            start = note.start
-            end = note.end
-            parsed_notes.append([
-                note.pitch, # Pitch
-                start - prev_start, # Step
-                end - start # Duration
-            ])
-            prev_start = start
-
-        return parsed_notes
-
-    def num_windows(self, midi):
-        return len(midi) - self._window_len
-
-    def __len__(self):
-        return sum([self.num_windows(midi) for midi in self.midis])
-
-    def reset_memoized_window_indexes(self):
-        self.current_windows = 0
-        self.current_doc_idx = 0
-
-    def item_idx_to_local_window(self, item_idx: int):
-        windows = self.current_windows
-        starting_doc_idx = self.current_doc_idx
-        for doc in self.midis[starting_doc_idx:]:
-            local_windows = self.num_windows(doc)
-            if item_idx <= windows + local_windows:
-                local_idx = item_idx - windows
-                return doc[local_idx:local_idx + self._window_len]
-            else:
-                windows += local_windows
-                self.current_windows = windows
-                self.current_doc_idx += 1
-
-        self.reset_memoized_window_indexes()
-        return self.item_idx_to_local_window(item_idx)
-
-    def __getitem__(self, idx):
-        designed_window = self.item_idx_to_local_window(idx)
-
-        example = designed_window[:-self._notes_to_guess]
-        label = designed_window[self._window_len-self._notes_to_guess:]
-
-        example = torch.tensor(example, device=torch.device('cpu'))
-        label = torch.tensor(label, device=torch.device('cpu'))
 
         return example, label
 
@@ -329,21 +181,23 @@ def build_vocab(docs_dict: dict, augment: int = 12):
     log("Building vocabulary...")
     vocab = {PAD_TOKEN: PAD_IDX}
     vocab_size = len(vocab)
-    for genre_docs_list in docs_dict.values():
-        for doc in genre_docs_list:
-            for word in doc.split(' '):
+    for genre_docs_list in tqdm.tqdm(docs_dict.values()):
+        for doc in tqdm.tqdm(genre_docs_list, leave=False):
+            for word in tqdm.tqdm(doc.split(' '), leave=False):
                 if word == '':
                     continue
                 if augment and not word.startswith('wait'):
-                    for t in range(0,augment) if augment > 0 else [0]:
+                    for t in tqdm.tqdm(range(0,augment) if augment > 0 else [0], leave=False):
                         offset = int(t-augment/2)
                         note_value = int(word[1 if word.startswith('p') else 4:])
                         note_value += offset
-                        if 0 <= note_value <= 95:
+                        if 0 <= note_value <= 119: # 95
                             w = f'{word[0] if word.startswith("p") else "endp"}{note_value}'
                             if w not in vocab:
                                 vocab[w] = vocab_size
                                 vocab_size += 1
+                        else:
+                            continue
                 else:
                     if word not in vocab:
                         vocab[word] = vocab_size
@@ -360,46 +214,22 @@ def build_split_loaders(
         augment: int = 12,
         window_dodge: int = 1
     ):
+    from encoder_decoder import CompletionEvalDataset
     docs = read_documents(folder, extension, limit_genres=limit_genres, max_docs_per_genre=max_docs_per_genre)
     vocab, vocab_size = build_vocab(docs, augment=augment)
     train_docs, val_docs, test_docs = split_documents_dict(docs, train_perc, val_perc, test_perc)
 
     train_loader = build_dataloader(NotewiseNonOverlappingDataset(train_docs, vocab, vocab_size, window_len, to_guess, augment=augment, window_dodge=window_dodge), batch_size=batch_size)
-    val_loader = build_dataloader(NotewiseNonOverlappingDataset(val_docs, vocab, vocab_size, window_len, to_guess, window_dodge=window_dodge), batch_size=batch_size)
-    test_loader = build_dataloader(NotewiseNonOverlappingDataset(test_docs, vocab, vocab_size, window_len, to_guess, window_dodge=window_dodge), batch_size=batch_size)
+    val_loader = build_dataloader(NotewiseNonOverlappingDataset(val_docs, vocab, vocab_size, window_len, to_guess, window_dodge=1), batch_size=batch_size)
+    test_loader = build_dataloader(NotewiseNonOverlappingDataset(test_docs, vocab, vocab_size, window_len, to_guess, window_dodge=1), batch_size=batch_size)
 
-    return train_loader, val_loader, test_loader, vocab_size
+    flattened_docs = []
+    for d in sum(val_docs.values(), []):
+        new_d = []
+        for w in d.split(" "):
+            if w in vocab:
+                new_d.append(vocab[w])
+        flattened_docs.append(new_d)
+    comp_eval_loader = DataLoader(CompletionEvalDataset(flattened_docs, window_len-to_guess), batch_size=batch_size)
 
-def build_split_loaders_triplet(train_perc=0.8, val_perc=0.1, test_perc=0.1,
-        window_len: int = 10, to_guess: int = 1, batch_size: int = 16):
-    log("Reading MIDI files...")
-    filenames = glob.glob(f'datasets/merged/**/*.mid*')
-    pms = []
-    total = 0
-    valid = 0
-    for filename in tqdm.tqdm(filenames):
-        pm = pretty_midi.PrettyMIDI(filename)
-        total += 1
-        for i, instr in enumerate(pm.instruments):
-            if i >= 2:
-                break
-            if instr.program > 8:
-                break
-        else:
-            pms.append(pm)
-            valid += 1
-    log(f"MIDI files read: {valid} valid out of {total} ({valid / total * 100}%)")
-    train_pms, val_pms, test_pms = split_list(pms, train_perc, val_perc, test_perc)
-
-    train_loader = build_dataloader(TripletDataset(train_pms, window_len, to_guess), batch_size=batch_size)
-    val_loader = build_dataloader(TripletDataset(val_pms, window_len, to_guess), batch_size=batch_size)
-    test_loader = build_dataloader(TripletDataset(test_pms, window_len, to_guess), batch_size=batch_size)
-
-    return train_loader, val_loader, test_loader
-
-
-if __name__ == '__main__':
-    set_seed()
-
-    docs = read_documents("texts-12", '.notewise')
-    dataloader = build_dataloader(NotewiseDataset(docs, 10), batch_size=16)
+    return train_loader, val_loader, test_loader, comp_eval_loader, vocab
