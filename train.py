@@ -3,11 +3,9 @@ from torch import nn, GradScaler
 from torch.optim import Adam
 import wandb
 
-from dataloader import set_seed, build_split_loaders, build_split_loaders_triplet
+from dataloader import set_seed, build_split_loaders
 from encoder_decoder import EncDecWords, EncoderWords, DecoderWords
-from rnn_plain import RNNPlain
 from rnn_timedistributed import RNNTD
-from rnn_triplet import RNNTriplet
 from utils import log
 
 if __name__ == '__main__':
