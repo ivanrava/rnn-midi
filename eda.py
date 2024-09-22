@@ -133,7 +133,7 @@ def preprocess_raw_array(data):
     collected_data = check_which_pieces_change_key_or_time_signature(collected_data)
     return collected_data
 
-def filter_raw_array(data, max_instruments: int = 8, max_minutes: int = 15):
+def filter_raw_array(data, max_instruments: int = 8, max_minutes: int = 20):
     collected_data = [el for el in data if
                       len(el['music21_instruments']) <= max_instruments
                       and el['length'] < max_minutes * 60]
@@ -143,12 +143,13 @@ def filter_raw_array(data, max_instruments: int = 8, max_minutes: int = 15):
 def read_pickle_into_df(
         filename: str = 'pijama.pickle',
         dataset_human_name: str = 'PiJAMA',
+        max_instruments: int = 8,
         genre: str = None
 ):
     collected_data = read_pickle_raw(filename)
 
     collected_data = preprocess_raw_array(collected_data)
-    collected_data = filter_raw_array(collected_data)
+    collected_data = filter_raw_array(collected_data, max_instruments=max_instruments)
 
     df = filter_raw_array_to_df(collected_data, [
         'duration', 'length', 'filename', 'key',
@@ -214,7 +215,13 @@ def plot_keys_time_signatures(df):
     plt.show()
 
 
+def plot_number_of_instruments(df):
+    sns.barplot(data=df, y='dataset', x='length', hue='instruments_number', estimator=sum, errorbar=None)
+    plt.show()
+
+
 def plots(df: pd.DataFrame):
+    plot_number_of_instruments(df)
     plot_lengths(df)
     plot_genres(df)
     plot_keys_time_signatures(df)
@@ -225,13 +232,12 @@ def plots(df: pd.DataFrame):
 
 
 if __name__ == '__main__':
-    df_maestro = read_pickle_into_df('maestro.pickle', 'MAESTRO', 'Classical')
-    df_pijama = read_pickle_into_df('pijama.pickle', 'PiJAMA', 'Jazz')
-    df_vgmusic = read_pickle_into_df('vgmusic.pickle', 'VGMusic', 'Soundtracks')
-    df_adl = read_pickle_into_df('adl.pickle', 'ADL Piano')
+    df_classicalmidi = read_pickle_into_df('classicalmidi-piano.pickle', 'ClassicalMidi', genre='Classical', max_instruments=2)
+    df_vgmusic = read_pickle_into_df('vgmusic.pickle', 'VGMusic', genre='Soundtracks', max_instruments=2)
+    df_adl = read_pickle_into_df('adl.pickle', 'ADL Piano', max_instruments=2)
     df_adl = adl_parse_genres(df_adl)
 
-    df_merged = merge_datasets_and_clean([df_maestro, df_adl, df_vgmusic, df_pijama])
+    df_merged = merge_datasets_and_clean([df_classicalmidi, df_adl, df_vgmusic])
     df_merged = add_columns(df_merged)
 
     df_piano = df_merged[df_merged['are_all_keyboards']]
