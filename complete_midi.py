@@ -39,10 +39,10 @@ def encode_sequence(model: RNNTD, sequence: list):
     preds = model.generate_new_note(sequence)
     return preds
 
-
 def pick_note_from_preds(preds, temperature = 1.0):
     log_preds = preds[-1, :]
-    probs = np.exp(log_preds / temperature)
+    max_val = np.max(log_preds)
+    probs = np.exp((log_preds - max_val) / temperature)
     probs /= np.sum(probs)
     return np.random.choice(np.arange(len(probs)), p=probs)
 
